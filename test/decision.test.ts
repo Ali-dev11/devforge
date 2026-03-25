@@ -89,3 +89,24 @@ test("architecture choices stay compatible with project intent", () => {
     ["modular"],
   );
 });
+
+test("nestjs javascript selections normalize back to typescript", () => {
+  const plan = buildDefaultPlan(environment, cliOptions);
+  plan.intent = "backend-api";
+  plan.backend = {
+    framework: "nestjs",
+    language: "javascript",
+    adapter: "fastify",
+    auth: [],
+    orm: "none",
+    database: "none",
+    redis: false,
+    swagger: true,
+    websockets: false,
+  };
+
+  const result = normalizeProjectPlan(plan, environment);
+
+  assert.equal(result.plan.backend?.language, "typescript");
+  assert.match(result.warnings.join(" "), /NestJS is generated as a TypeScript-first stack/);
+});

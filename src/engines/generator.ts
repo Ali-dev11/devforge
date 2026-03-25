@@ -8,6 +8,7 @@ import type {
 } from "../types.js";
 import {
   ensureDir,
+  isDirectory,
   isDirectoryEmpty,
   pathExists,
   writeGeneratedFiles,
@@ -19,6 +20,12 @@ export async function generateProject(
   environment: EnvironmentInfo,
 ): Promise<GeneratedProjectResult> {
   const projectExists = await pathExists(plan.targetDir);
+
+  if (projectExists && !(await isDirectory(plan.targetDir))) {
+    throw new Error(
+      `Target path is not a directory: ${plan.targetDir}. Choose a new directory path instead.`,
+    );
+  }
 
   if (projectExists && !(await isDirectoryEmpty(plan.targetDir))) {
     throw new Error(

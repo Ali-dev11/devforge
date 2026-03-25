@@ -1,7 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildDefaultPlan } from "../src/engines/prompts.js";
+import { mkdtemp, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { generateProject } from "../src/engines/generator.js";
+import { applyIntentDefaults, buildDefaultPlan } from "../src/engines/prompts.js";
 import { buildProjectFiles } from "../src/templates.js";
+import { writeGeneratedFiles } from "../src/utils/fs.js";
 import type { CliOptions, EnvironmentInfo } from "../src/types.js";
 
 const environment: EnvironmentInfo = {
@@ -55,4 +60,88 @@ test("generator returns a runnable default frontend scaffold", () => {
   );
   assert.match(readmeFile.content, /Quick Start/);
   assert.match(readmeFile.content, /Common Commands/);
+});
+
+test("fullstack scripts honor the selected package manager", () => {
+  const plan = buildDefaultPlan(environment, cliOptions);
+  plan.intent = "fullstack-app";
+  applyIntentDefaults(plan);
+
+  const files = buildProjectFiles(plan, environment);
+  const packageJsonFile = files.find((file) => file.path === "package.json");
+
+  assert.ok(packageJsonFile);
+
+  const packageJson = JSON.parse(packageJsonFile.content) as {
+    scripts: Record<string, string>;
+  };
+
+  assert.equal(
+    packageJson.scripts.dev,
+    'concurrently -n web,api "pnpm run dev:web" "pnpm run dev:api"',
+  );
+  assert.equal(
+    packageJson.scripts.build,
+    "pnpm run build:web && pnpm run build:api",
+  );
+});
+
+test("workspace scaffolds local tsconfig files, app tests, and root tooling dependencies", () => {
+  const plan = buildDefaultPlan(environment, cliOptions);
+  plan.intent = "fullstack-app";
+  plan.architecture = "monorepo";
+  applyIntentDefaults(plan);
+  plan.testing.runner = "jest";
+  plan.testing.environment = "node";
+
+  const files = buildProjectFiles(plan, environment);
+  const paths = new Set(files.map((file) => file.path));
+  const rootPackageJsonFile = files.find((file) => file.path === "package.json");
+
+  assert.ok(rootPackageJsonFile);
+
+  const rootPackageJson = JSON.parse(rootPackageJsonFile.content) as {
+    scripts: Record<string, string>;
+    devDependencies: Record<string, string>;
+  };
+
+  assert.ok(paths.has("apps/web/tsconfig.json"));
+  assert.ok(paths.has("apps/api/tsconfig.json"));
+  assert.ok(paths.has("apps/web/jest.config.ts"));
+  assert.ok(paths.has("apps/api/jest.config.ts"));
+  assert.equal(rootPackageJson.scripts.test, "turbo run test");
+  assert.equal(rootPackageJson.devDependencies.typescript, "latest");
+  assert.equal(rootPackageJson.devDependencies.eslint, "latest");
+  assert.equal(rootPackageJson.devDependencies.turbo, "latest");
+});
+
+test("generateProject rejects file targets that are not directories", async () => {
+  const plan = buildDefaultPlan(environment, cliOptions);
+  const tempDir = await mkdtemp(join(tmpdir(), "devforge-file-target-"));
+  const blockedPath = join(tempDir, "blocked");
+
+  await writeFile(blockedPath, "not a directory", "utf8");
+  plan.targetDir = blockedPath;
+
+  await assert.rejects(
+    generateProject(plan, environment),
+    /Target path is not a directory/,
+  );
+});
+
+test("writeGeneratedFiles blocks duplicate and escaping output paths", async () => {
+  const tempDir = await mkdtemp(join(tmpdir(), "devforge-write-"));
+
+  await assert.rejects(
+    writeGeneratedFiles(tempDir, [
+      { path: "README.md", content: "a" },
+      { path: "README.md", content: "b" },
+    ]),
+    /Duplicate generated file path/,
+  );
+
+  await assert.rejects(
+    writeGeneratedFiles(tempDir, [{ path: "../escape.txt", content: "x" }]),
+    /outside the target directory/,
+  );
 });

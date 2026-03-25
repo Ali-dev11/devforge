@@ -3,6 +3,7 @@ import type {
   EnvironmentInfo,
   FrontendFramework,
   GeneratedFile,
+  NestAdapter,
   PackageManager,
   ProjectPlan,
 } from "./types.js";
@@ -144,6 +145,29 @@ function rootTsConfig(): string {
     },
     include: ["src", "app", "apps", "packages"],
   });
+}
+
+function localTsConfig(include: string[] = ["src", "app", "tests", "cypress"]): string {
+  return stringifyJson({
+    compilerOptions: {
+      target: "ES2022",
+      module: "NodeNext",
+      moduleResolution: "NodeNext",
+      strict: true,
+      skipLibCheck: true,
+      esModuleInterop: true,
+      forceConsistentCasingInFileNames: true,
+      resolveJsonModule: true,
+      outDir: "dist",
+      rootDir: ".",
+      jsx: "react-jsx",
+    },
+    include,
+  });
+}
+
+function generatedProjectVersion(): string {
+  return "0.1.0";
 }
 
 function licenseText(license: ProjectPlan["metadata"]["license"]): string {
@@ -514,7 +538,10 @@ function frontendDependencies(framework: FrontendFramework): {
   }
 }
 
-function backendDependencies(framework: BackendFramework): {
+function backendDependencies(
+  framework: BackendFramework,
+  adapter?: NestAdapter,
+): {
   dependencies: Record<string, string>;
   devDependencies: Record<string, string>;
 } {
@@ -524,7 +551,8 @@ function backendDependencies(framework: BackendFramework): {
         dependencies: {
           "@nestjs/common": "latest",
           "@nestjs/core": "latest",
-          "@nestjs/platform-express": "latest",
+          [adapter === "fastify" ? "@nestjs/platform-fastify" : "@nestjs/platform-express"]:
+            "latest",
           "reflect-metadata": "latest",
           rxjs: "latest",
         },
@@ -583,6 +611,13 @@ function collectDependencies(plan: ProjectPlan): {
     const frontend = frontendDependencies(plan.frontend.framework);
     addRecord(dependencies, frontend.dependencies);
     addRecord(devDependencies, frontend.devDependencies);
+
+    if (usesTypeScript(plan) && isReactLike(plan)) {
+      addRecord(devDependencies, {
+        "@types/react": "latest",
+        "@types/react-dom": "latest",
+      });
+    }
 
     if (plan.frontend.styling === "tailwind-css") {
       addRecord(devDependencies, {
@@ -693,9 +728,24 @@ function collectDependencies(plan: ProjectPlan): {
   }
 
   if (plan.backend) {
-    const backend = backendDependencies(plan.backend.framework);
+    const backend = backendDependencies(plan.backend.framework, plan.backend.adapter);
     addRecord(dependencies, backend.dependencies);
     addRecord(devDependencies, backend.devDependencies);
+
+    if (usesTypeScript(plan)) {
+      if (plan.backend.framework === "express") {
+        addRecord(devDependencies, {
+          "@types/cors": "latest",
+          "@types/express": "latest",
+        });
+      }
+
+      if (plan.backend.framework === "koa") {
+        addRecord(devDependencies, {
+          "@types/koa": "latest",
+        });
+      }
+    }
 
     if (plan.backend.auth.includes("jwt")) {
       addRecord(dependencies, {
@@ -734,10 +784,24 @@ function collectDependencies(plan: ProjectPlan): {
     }
 
     if (plan.backend.swagger) {
-      addRecord(dependencies, {
-        "@nestjs/swagger": "latest",
-        "swagger-ui-express": "latest",
-      });
+      if (plan.backend.framework === "nestjs") {
+        addRecord(dependencies, {
+          "@nestjs/swagger": "latest",
+        });
+      }
+
+      if (plan.backend.framework === "fastify") {
+        addRecord(dependencies, {
+          "@fastify/swagger": "latest",
+          "@fastify/swagger-ui": "latest",
+        });
+      }
+
+      if (plan.backend.framework === "express") {
+        addRecord(dependencies, {
+          "swagger-ui-express": "latest",
+        });
+      }
     }
 
     if (plan.backend.websockets) {
@@ -756,7 +820,6 @@ function collectDependencies(plan: ProjectPlan): {
   if (plan.intent === "chrome-extension") {
     addRecord(devDependencies, {
       vite: "latest",
-      "@vitejs/plugin-react": "latest",
       typescript: "latest",
       "@types/chrome": "latest",
     });
@@ -765,6 +828,15 @@ function collectDependencies(plan: ProjectPlan): {
       addRecord(dependencies, {
         react: "latest",
         "react-dom": "latest",
+      });
+      addRecord(devDependencies, {
+        "@types/react": "latest",
+        "@types/react-dom": "latest",
+        "@vitejs/plugin-react": "latest",
+      });
+    } else {
+      addRecord(devDependencies, {
+        vite: "latest",
       });
     }
   }
@@ -821,9 +893,14 @@ function collectDependencies(plan: ProjectPlan): {
     if (plan.testing.runner === "jest") {
       addRecord(devDependencies, {
         jest: "latest",
-        "ts-jest": "latest",
-        "@types/jest": "latest",
       });
+
+      if (usesTypeScript(plan)) {
+        addRecord(devDependencies, {
+          "ts-jest": "latest",
+          "@types/jest": "latest",
+        });
+      }
 
       if (plan.testing.environment === "jsdom") {
         addRecord(devDependencies, {
@@ -972,12 +1049,12 @@ function singlePackageScripts(plan: ProjectPlan): Record<string, string> {
         });
       } else {
         addRecord(scripts, {
-          dev: "concurrently -n web,api \"npm run dev:web\" \"npm run dev:api\"",
+          dev: `concurrently -n web,api "${packageManagerRunCommand(plan.packageManager, "dev:web")}" "${packageManagerRunCommand(plan.packageManager, "dev:api")}"`,
           "dev:web": "vite",
           "dev:api": usesTypeScript(plan)
             ? "tsx watch src/server.ts"
             : "node --watch src/server.js",
-          build: "npm run build:web && npm run build:api",
+          build: `${packageManagerRunCommand(plan.packageManager, "build:web")} && ${packageManagerRunCommand(plan.packageManager, "build:api")}`,
           "build:web": "vite build",
           "build:api": usesTypeScript(plan)
             ? "tsc -p tsconfig.json"
@@ -1038,7 +1115,7 @@ function singlePackageJson(plan: ProjectPlan): GeneratedFile {
   const { dependencies, devDependencies } = collectDependencies(plan);
   const data: PackageJsonShape = {
     name: plan.projectName,
-    version: "0.1.0",
+    version: generatedProjectVersion(),
     private: true,
     type: "module",
     scripts: sortRecord(singlePackageScripts(plan)),
@@ -1737,7 +1814,7 @@ function backendFiles(plan: ProjectPlan): GeneratedFile[] {
   if (plan.backend?.orm === "drizzle") {
     files.push(
       makeFile(
-        "src/db/schema.ts",
+        `src/db/schema.${extension}`,
         [
           "export const schemaNotes = {",
           "  message: \"Define your Drizzle tables here.\",",
@@ -1779,7 +1856,7 @@ function chromeExtensionFiles(plan: ProjectPlan): GeneratedFile[] {
       stringifyJson({
         manifest_version: 3,
         name: toTitleCase(plan.projectName),
-        version: "0.1.0",
+        version: generatedProjectVersion(),
         action: plan.extension?.includesPopup
           ? {
               default_popup: "popup.html",
@@ -2062,12 +2139,16 @@ function testingFiles(plan: ProjectPlan): GeneratedFile[] {
     return [];
   }
 
+  const configExtension = usesTypeScript(plan) ? "ts" : "js";
+  const jestConfigExtension = usesTypeScript(plan) ? "ts" : "cjs";
+  const testExtension = usesTypeScript(plan) ? "ts" : "js";
+
   if (plan.testing.runner === "vitest") {
     const environment =
       plan.testing.environment === "happy-dom" ? "happy-dom" : plan.testing.environment;
     return [
       makeFile(
-        "vitest.config.ts",
+        `vitest.config.${configExtension}`,
         [
           "import { defineConfig } from \"vitest/config\";",
           "",
@@ -2081,8 +2162,8 @@ function testingFiles(plan: ProjectPlan): GeneratedFile[] {
       ),
       makeFile(
         plan.frontend || plan.intent === "chrome-extension"
-          ? "src/__tests__/app.test.ts"
-          : "src/__tests__/health.test.ts",
+          ? `src/__tests__/app.test.${testExtension}`
+          : `src/__tests__/health.test.${testExtension}`,
         [
           "import { describe, expect, it } from \"vitest\";",
           "",
@@ -2100,21 +2181,25 @@ function testingFiles(plan: ProjectPlan): GeneratedFile[] {
   if (plan.testing.runner === "jest") {
     return [
       makeFile(
-        "jest.config.ts",
+        `jest.config.${jestConfigExtension}`,
         [
-          "import type { Config } from \"jest\";",
-          "",
-          "const config: Config = {",
+          ...(usesTypeScript(plan)
+            ? [
+                "import type { Config } from \"jest\";",
+                "",
+                "const config: Config = {",
+              ]
+            : ["const config = {"]),
           `  testEnvironment: "${plan.testing.environment === "node" ? "node" : "jsdom"}",`,
-          "  testMatch: [\"**/*.test.ts\", \"**/*.test.tsx\"],",
+          `  testMatch: ["**/*.test.${testExtension}", "**/*.test.${usesTypeScript(plan) ? "tsx" : "jsx"}"],`,
           "};",
           "",
-          "export default config;",
+          usesTypeScript(plan) ? "export default config;" : "module.exports = config;",
           "",
         ].join("\n"),
       ),
       makeFile(
-        "src/__tests__/starter.test.ts",
+        `src/__tests__/starter.test.${testExtension}`,
         [
           "describe(\"starter test\", () => {",
           "  it(\"keeps the scaffold wired\", () => {",
@@ -2130,7 +2215,7 @@ function testingFiles(plan: ProjectPlan): GeneratedFile[] {
   if (plan.testing.runner === "playwright") {
     return [
       makeFile(
-        "playwright.config.ts",
+        `playwright.config.${configExtension}`,
         [
           "import { defineConfig } from \"@playwright/test\";",
           "",
@@ -2144,7 +2229,7 @@ function testingFiles(plan: ProjectPlan): GeneratedFile[] {
         ].join("\n"),
       ),
       makeFile(
-        "tests/smoke.spec.ts",
+        `tests/smoke.spec.${testExtension}`,
         [
           "import { expect, test } from \"@playwright/test\";",
           "",
@@ -2161,7 +2246,7 @@ function testingFiles(plan: ProjectPlan): GeneratedFile[] {
   if (plan.testing.runner === "cypress") {
     return [
       makeFile(
-        "cypress.config.ts",
+        `cypress.config.${configExtension}`,
         [
           "import { defineConfig } from \"cypress\";",
           "",
@@ -2174,7 +2259,7 @@ function testingFiles(plan: ProjectPlan): GeneratedFile[] {
         ].join("\n"),
       ),
       makeFile(
-        "cypress/e2e/starter.cy.ts",
+        `cypress/e2e/starter.cy.${testExtension}`,
         [
           "describe(\"starter smoke test\", () => {",
           "  it(\"loads the app shell\", () => {",
@@ -2190,7 +2275,8 @@ function testingFiles(plan: ProjectPlan): GeneratedFile[] {
   return [];
 }
 
-function toolingFiles(plan: ProjectPlan): GeneratedFile[] {
+function toolingFiles(plan: ProjectPlan, options?: { includeTesting?: boolean }): GeneratedFile[] {
+  const includeTesting = options?.includeTesting ?? true;
   const files: GeneratedFile[] = [
     makeFile(".editorconfig", editorConfigContent()),
     makeFile(".gitattributes", "* text=auto eol=lf\n"),
@@ -2248,7 +2334,9 @@ function toolingFiles(plan: ProjectPlan): GeneratedFile[] {
     files.push(makeFile(".dockerignore", "node_modules\ndist\n.git\ncoverage\n"));
   }
 
-  files.push(...testingFiles(plan));
+  if (includeTesting) {
+    files.push(...testingFiles(plan));
+  }
 
   return files;
 }
@@ -2282,12 +2370,53 @@ function prefixFiles(prefix: string, files: GeneratedFile[]): GeneratedFile[] {
   }));
 }
 
+function workspaceRootDevDependencies(plan: ProjectPlan): Record<string, string> {
+  const devDependencies: Record<string, string> = {};
+
+  if (usesTypeScript(plan)) {
+    addRecord(devDependencies, {
+      "@types/node": "latest",
+      tsx: "latest",
+      typescript: "latest",
+    });
+  }
+
+  if (plan.tooling.eslint) {
+    addRecord(devDependencies, {
+      "@eslint/js": "latest",
+      eslint: "latest",
+      "typescript-eslint": "latest",
+    });
+  }
+
+  if (plan.tooling.prettier) {
+    addRecord(devDependencies, {
+      prettier: "latest",
+    });
+  }
+
+  if (plan.tooling.husky) {
+    addRecord(devDependencies, {
+      husky: "latest",
+    });
+  }
+
+  if (plan.tooling.commitlint) {
+    addRecord(devDependencies, {
+      "@commitlint/cli": "latest",
+      "@commitlint/config-conventional": "latest",
+    });
+  }
+
+  return devDependencies;
+}
+
 function workspaceRootPackageJson(
   plan: ProjectPlan,
   tool: ProjectPlan["workspace"]["tool"],
 ): GeneratedFile {
-  const devDependencies: Record<string, string> = {};
-  const scripts =
+  const devDependencies: Record<string, string> = workspaceRootDevDependencies(plan);
+  const scripts: Record<string, string> =
     tool === "nx"
       ? {
           dev: "nx run-many -t dev",
@@ -2297,6 +2426,14 @@ function workspaceRootPackageJson(
           dev: "turbo dev",
           build: "turbo build",
         };
+
+  if (plan.testing.enabled && (plan.testing.runner === "vitest" || plan.testing.runner === "jest")) {
+    scripts.test = tool === "nx" ? "nx run-many -t test" : "turbo run test";
+  }
+
+  if (plan.testing.enabled && (plan.testing.runner === "playwright" || plan.testing.runner === "cypress")) {
+    scripts["test:e2e"] = tool === "nx" ? "nx run-many -t test:e2e" : "turbo run test:e2e";
+  }
 
   if (tool === "turborepo") {
     devDependencies.turbo = "latest";
@@ -2308,7 +2445,7 @@ function workspaceRootPackageJson(
 
   const data: PackageJsonShape = {
     name: plan.projectName,
-    version: "0.1.0",
+    version: generatedProjectVersion(),
     private: true,
     type: "module",
     workspaces: ["apps/*", "packages/*"],
@@ -2329,7 +2466,7 @@ function workspaceFiles(plan: ProjectPlan): GeneratedFile[] {
     makeFile(".gitignore", rootGitignore()),
     makeFile(".nvmrc", `${nodeVersionSpec(plan)}\n`),
     ...docsFiles(plan),
-    ...toolingFiles(plan),
+    ...toolingFiles(plan, { includeTesting: false }),
   ];
 
   if (plan.metadata.generateEnvExample) {
@@ -2371,13 +2508,20 @@ function workspaceFiles(plan: ProjectPlan): GeneratedFile[] {
       intent: "frontend-app",
       architecture: "simple",
       backend: undefined,
+      tooling: {
+        ...plan.tooling,
+        husky: false,
+        commitlint: false,
+        githubActions: false,
+        docker: false,
+      },
     };
     files.push(
       makeFile(
         "apps/web/package.json",
         stringifyJson({
           name: `${plan.projectName}-web`,
-          version: "0.1.0",
+          version: generatedProjectVersion(),
           private: true,
           type: "module",
           scripts: sortRecord(singlePackageScripts(webPlan)),
@@ -2386,6 +2530,10 @@ function workspaceFiles(plan: ProjectPlan): GeneratedFile[] {
         }),
       ),
     );
+    if (usesTypeScript(webPlan)) {
+      files.push(makeFile("apps/web/tsconfig.json", localTsConfig()));
+    }
+    files.push(...prefixFiles("apps/web", testingFiles(webPlan)));
     files.push(...prefixFiles("apps/web", frontendFiles(webPlan)));
   }
 
@@ -2395,13 +2543,20 @@ function workspaceFiles(plan: ProjectPlan): GeneratedFile[] {
       intent: "backend-api",
       architecture: "simple",
       frontend: undefined,
+      tooling: {
+        ...plan.tooling,
+        husky: false,
+        commitlint: false,
+        githubActions: false,
+        docker: false,
+      },
     };
     files.push(
       makeFile(
         "apps/api/package.json",
         stringifyJson({
           name: `${plan.projectName}-api`,
-          version: "0.1.0",
+          version: generatedProjectVersion(),
           private: true,
           type: "module",
           scripts: sortRecord(singlePackageScripts(apiPlan)),
@@ -2410,6 +2565,10 @@ function workspaceFiles(plan: ProjectPlan): GeneratedFile[] {
         }),
       ),
     );
+    if (usesTypeScript(apiPlan)) {
+      files.push(makeFile("apps/api/tsconfig.json", localTsConfig(["src", "tests", "cypress"])));
+    }
+    files.push(...prefixFiles("apps/api", testingFiles(apiPlan)));
     files.push(...prefixFiles("apps/api", backendFiles(apiPlan)));
   }
 
@@ -2459,6 +2618,13 @@ function microfrontendFiles(plan: ProjectPlan): GeneratedFile[] {
     intent: "frontend-app",
     architecture: "simple",
     backend: undefined,
+    tooling: {
+      ...workspacePlan.tooling,
+      husky: false,
+      commitlint: false,
+      githubActions: false,
+      docker: false,
+    },
     frontend: workspacePlan.frontend ?? {
       framework: "react-vite",
       rendering: "client",
@@ -2474,7 +2640,7 @@ function microfrontendFiles(plan: ProjectPlan): GeneratedFile[] {
       "apps/host/package.json",
       stringifyJson({
         name: `${workspacePlan.projectName}-host`,
-        version: "0.1.0",
+        version: generatedProjectVersion(),
         private: true,
         type: "module",
         scripts: sortRecord(singlePackageScripts(hostPlan)),
@@ -2483,6 +2649,10 @@ function microfrontendFiles(plan: ProjectPlan): GeneratedFile[] {
       }),
     ),
   );
+  if (usesTypeScript(hostPlan)) {
+    files.push(makeFile("apps/host/tsconfig.json", localTsConfig()));
+  }
+  files.push(...prefixFiles("apps/host", testingFiles(hostPlan)));
   files.push(...prefixFiles("apps/host", frontendFiles(hostPlan)));
 
   for (const remoteApp of workspacePlan.workspace.remoteApps) {
@@ -2496,7 +2666,7 @@ function microfrontendFiles(plan: ProjectPlan): GeneratedFile[] {
         `apps/remote-${remoteApp}/package.json`,
         stringifyJson({
           name: `${workspacePlan.projectName}-${remoteApp}`,
-          version: "0.1.0",
+          version: generatedProjectVersion(),
           private: true,
           type: "module",
           scripts: sortRecord(singlePackageScripts(remotePlan)),
@@ -2506,6 +2676,10 @@ function microfrontendFiles(plan: ProjectPlan): GeneratedFile[] {
       ),
     );
 
+    if (usesTypeScript(remotePlan)) {
+      files.push(makeFile(`apps/remote-${remoteApp}/tsconfig.json`, localTsConfig()));
+    }
+    files.push(...prefixFiles(`apps/remote-${remoteApp}`, testingFiles(remotePlan)));
     files.push(...prefixFiles(`apps/remote-${remoteApp}`, frontendFiles(remotePlan)));
   }
 

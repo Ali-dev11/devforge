@@ -1,5 +1,5 @@
 import { chmod, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { dirname, resolve, sep } from "node:path";
 import type { GeneratedFile, ResumeState } from "../types.js";
 
 export async function ensureDir(path: string): Promise<void> {
@@ -20,8 +20,21 @@ export async function isDirectoryEmpty(path: string): Promise<boolean> {
     return true;
   }
 
+  const stats = await stat(path);
+  if (!stats.isDirectory()) {
+    return false;
+  }
+
   const entries = await readdir(path);
   return entries.length === 0;
+}
+
+export async function isDirectory(path: string): Promise<boolean> {
+  try {
+    return (await stat(path)).isDirectory();
+  } catch {
+    return false;
+  }
 }
 
 export async function writeTextFile(path: string, content: string, executable = false): Promise<void> {
@@ -35,9 +48,21 @@ export async function writeTextFile(path: string, content: string, executable = 
 
 export async function writeGeneratedFiles(rootDir: string, files: GeneratedFile[]): Promise<string[]> {
   const written: string[] = [];
+  const seenPaths = new Set<string>();
+  const resolvedRoot = resolve(rootDir);
 
   for (const file of files) {
-    const fullPath = `${rootDir}/${file.path}`;
+    const fullPath = resolve(resolvedRoot, file.path);
+
+    if (fullPath !== resolvedRoot && !fullPath.startsWith(`${resolvedRoot}${sep}`)) {
+      throw new Error(`Refusing to write generated file outside the target directory: ${file.path}`);
+    }
+
+    if (seenPaths.has(fullPath)) {
+      throw new Error(`Duplicate generated file path detected: ${file.path}`);
+    }
+
+    seenPaths.add(fullPath);
     await writeTextFile(fullPath, file.content, file.executable);
     written.push(fullPath);
   }

@@ -123,6 +123,11 @@ export function normalizeProjectPlan(
   }
 
   if (plan.backend) {
+    if (plan.backend.framework === "nestjs" && plan.backend.language !== "typescript") {
+      warnings.push("NestJS is generated as a TypeScript-first stack; switching backend language to TypeScript.");
+      plan.backend.language = "typescript";
+    }
+
     if (plan.backend.framework !== "nestjs") {
       delete plan.backend.adapter;
     }
