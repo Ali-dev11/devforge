@@ -24,6 +24,7 @@ npm run dev -- --help
 npm run build
 npm run test
 npm run lint
+npm run docs:changelog
 npm run smoke
 npm run runtime:matrix -- --scenario backend-hono --scenario cli-tool
 ```
@@ -34,4 +35,5 @@ npm run runtime:matrix -- --scenario backend-hono --scenario cli-tool
 2. Run `npm run check`.
 3. Use `npm run smoke` for an end-to-end non-interactive scaffold.
 4. Use `npm run runtime:matrix` to verify generated installs, builds, and runtime surfaces for representative stacks.
-5. Update docs when command behavior or generated output changes.
+5. Run `npm run docs:changelog` after changelog updates so the GitHub Pages release history stays aligned.
+6. Update docs when command behavior or generated output changes.

@@ -28,6 +28,7 @@ npm run check
 ```bash
 npm run check
 npm run smoke
+npm run docs:changelog
 npm run runtime:matrix -- --scenario backend-hono --scenario cli-tool
 ```
 
@@ -53,8 +54,10 @@ For generated frontend, extension, and fullstack runtime scenarios, use Node `20
 - Use a minor release for backward-compatible CLI capabilities, templates, or generated output improvements.
 - Use a major release for breaking CLI, prompt, config, or generated-project changes.
 - Add release notes to `CHANGELOG.md` before publishing.
+- Regenerate `docs/changelog.md` with `npm run docs:changelog` whenever `CHANGELOG.md` changes.
 - Use `npm run release:patch`, `npm run release:minor`, or `npm run release:major` to bump versions.
 - The version commands run `npm run release:check` first so lint, typecheck, tests, build, and pack validation all pass before the version changes.
+- Push a semantic version tag like `v0.3.3` to trigger the GitHub Release workflow after the changelog and package version are in sync.
 
 ## Communication
 

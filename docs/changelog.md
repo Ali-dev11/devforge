@@ -1,10 +1,13 @@
+---
+title: Changelog
+---
+
 # Changelog
 
-All notable changes to this project will be documented in this file.
+Track what changed in DevForge CLI across releases, including scaffolding behavior, runtime verification improvements, and release automation updates.
 
-The format follows Keep a Changelog and the version numbers follow Semantic Versioning.
-
-## [Unreleased]
+- [GitHub Releases](https://github.com/Ali-dev11/devforge/releases)
+- [Repository Changelog](https://github.com/Ali-dev11/devforge/blob/main/CHANGELOG.md)
 
 ## [0.3.3] - 2026-03-26
 

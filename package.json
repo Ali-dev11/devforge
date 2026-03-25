@@ -1,6 +1,6 @@
 {
   "name": "@ali-dev11/devforge",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Production-focused AI-native project scaffolding CLI for JavaScript and TypeScript teams.",
   "license": "MIT",
   "author": "Ali-dev11",
@@ -43,6 +43,7 @@
     "dist"
   ],
   "scripts": {
+    "docs:changelog": "node scripts/changelog.mjs --docs docs/changelog.md",
     "clean": "node --eval \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
     "build": "npm run clean && tsc -p tsconfig.json",
     "dev": "tsx src/bin/devforge.ts",
