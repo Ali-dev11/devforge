@@ -228,3 +228,16 @@ test("recommended AI categories expand default selections to the current stack",
     "backend",
   ]);
 });
+
+test("custom frontend node versions warn when they fall below scaffold requirements", () => {
+  const plan = buildDefaultPlan(environment, cliOptions);
+  plan.nodeStrategy = "custom";
+  plan.customNodeVersion = "22.0.0";
+
+  const result = normalizeProjectPlan(plan, environment);
+
+  assert.match(
+    result.warnings.join(" "),
+    /below the recommended minimum for this stack/i,
+  );
+});

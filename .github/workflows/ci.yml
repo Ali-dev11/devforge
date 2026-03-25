@@ -6,7 +6,45 @@ on:
 
 jobs:
   validate:
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [20, 22]
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+
+  generated-runtime-matrix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario:
+          - landing-react-vite
+          - frontend-nextjs
+          - frontend-astro
+          - frontend-vue-vite
+          - frontend-nuxt
+          - frontend-svelte
+          - frontend-solidjs
+          - backend-express
+          - backend-fastify
+          - backend-hono
+          - backend-koa-javascript
+          - backend-nestjs
+          - fullstack-nextjs
+          - fullstack-react-api
+          - microfrontend-workspace
+          - chrome-extension-react
+          - chrome-extension-vanilla-ts
+          - cli-tool
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -14,4 +52,5 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run check
+      - run: npm run build
+      - run: node dist/bin/runtime-matrix.js --scenario ${{ matrix.scenario }}

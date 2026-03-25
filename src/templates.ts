@@ -8,6 +8,7 @@ import type {
   PackageManagerMetadata,
   ProjectPlan,
 } from "./types.js";
+import { generatedProjectNodeEngine } from "./utils/node-compat.js";
 import { joinSentence, toConstantCase, toTitleCase } from "./utils/strings.js";
 import {
   DEVFORGE_AUTHOR,
@@ -153,6 +154,7 @@ function rootTsConfig(): string {
       target: "ES2022",
       module: "NodeNext",
       moduleResolution: "NodeNext",
+      types: ["node"],
       strict: true,
       skipLibCheck: true,
       esModuleInterop: true,
@@ -172,6 +174,7 @@ function localTsConfig(include: string[] = ["src", "app", "tests", "cypress"]): 
       target: "ES2022",
       module: "NodeNext",
       moduleResolution: "NodeNext",
+      types: ["node"],
       strict: true,
       skipLibCheck: true,
       esModuleInterop: true,
@@ -1263,7 +1266,7 @@ function singlePackageJson(
     packageManager: packageManagerField(packageManagerMetadata),
     scripts: sortRecord(singlePackageScripts(plan)),
     engines: {
-      node: ">=20.0.0",
+      node: generatedProjectNodeEngine(plan),
     },
     dependencies: sortRecord(dependencies),
     devDependencies: sortRecord(devDependencies),
@@ -2240,6 +2243,29 @@ function cliToolFiles(plan: ProjectPlan): GeneratedFile[] {
 }
 
 function chromeExtensionFiles(plan: ProjectPlan): GeneratedFile[] {
+  const manifest = {
+    manifest_version: 3,
+    name: toTitleCase(plan.projectName),
+    version: generatedProjectVersion(),
+    action: plan.extension?.includesPopup
+      ? {
+          default_popup: "popup.html",
+        }
+      : undefined,
+    background: plan.extension?.includesBackground
+      ? {
+          service_worker: "src/background.js",
+        }
+      : undefined,
+    content_scripts: plan.extension?.includesContent
+      ? [
+          {
+            matches: ["<all_urls>"],
+            js: ["src/content.js"],
+          },
+        ]
+      : undefined,
+  };
   const extensionInfo = JSON.stringify(
     projectMetadataPayload(plan, {
       service: "chrome-extension",
@@ -2254,30 +2280,47 @@ function chromeExtensionFiles(plan: ProjectPlan): GeneratedFile[] {
   );
   const files: GeneratedFile[] = [
     makeFile(
-      "manifest.json",
-      stringifyJson({
-        manifest_version: 3,
-        name: toTitleCase(plan.projectName),
-        version: generatedProjectVersion(),
-        action: plan.extension?.includesPopup
-          ? {
-              default_popup: "popup.html",
-            }
-          : undefined,
-        background: plan.extension?.includesBackground
-          ? {
-              service_worker: "src/background.ts",
-            }
-          : undefined,
-        content_scripts: plan.extension?.includesContent
-          ? [
-              {
-                matches: ["<all_urls>"],
-                js: ["src/content.ts"],
-              },
-            ]
-          : undefined,
-      }),
+      "public/manifest.json",
+      stringifyJson(manifest),
+    ),
+    makeFile(
+      "vite.config.ts",
+      [
+        "import { defineConfig } from \"vite\";",
+        ...(plan.extension?.flavor === "react"
+          ? ["import react from \"@vitejs/plugin-react\";"]
+          : []),
+        "import { resolve } from \"node:path\";",
+        "",
+        "export default defineConfig({",
+        ...(plan.extension?.flavor === "react" ? ["  plugins: [react()],"] : []),
+        "  build: {",
+        "    rollupOptions: {",
+        "      input: {",
+        ...(plan.extension?.includesPopup ? ['        popup: resolve(__dirname, "popup.html"),'] : []),
+        ...(plan.extension?.includesBackground
+          ? ['        background: resolve(__dirname, "src/background.ts"),']
+          : []),
+        ...(plan.extension?.includesContent
+          ? ['        content: resolve(__dirname, "src/content.ts"),']
+          : []),
+        "      },",
+        "      output: {",
+        "        entryFileNames: (chunkInfo) => {",
+        "          if (chunkInfo.name === \"background\") {",
+        "            return \"src/background.js\";",
+        "          }",
+        "          if (chunkInfo.name === \"content\") {",
+        "            return \"src/content.js\";",
+        "          }",
+        "          return \"assets/[name]-[hash].js\";",
+        "        },",
+        "      },",
+        "    },",
+        "  },",
+        "});",
+        "",
+      ].join("\n"),
     ),
   ];
 
@@ -2896,7 +2939,7 @@ function workspaceRootPackageJson(
     workspaces: ["apps/*", "packages/*"],
     scripts: sortRecord(appendQualityScripts(plan, scripts)),
     engines: {
-      node: ">=20.0.0",
+      node: generatedProjectNodeEngine(plan),
     },
     devDependencies: sortRecord(devDependencies),
   };

@@ -1,6 +1,6 @@
 {
   "name": "@ali-dev11/devforge",
-  "version": "0.2.3",
+  "version": "0.3.0",
   "description": "Production-focused AI-native project scaffolding CLI for JavaScript and TypeScript teams.",
   "license": "MIT",
   "author": "Ali-dev11",
@@ -50,6 +50,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --import tsx --test test/**/*.test.ts",
     "check": "npm run lint && npm run typecheck && npm run test && npm run build",
+    "runtime:matrix": "npm run build && node dist/bin/runtime-matrix.js",
     "release:check": "npm run check && npm pack --dry-run --ignore-scripts --cache /tmp/devforge-npm-cache",
     "release:patch": "npm version patch",
     "release:minor": "npm version minor",

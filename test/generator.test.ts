@@ -45,6 +45,7 @@ test("generator returns a runnable default frontend scaffold", () => {
 
   const packageJson = JSON.parse(packageJsonFile.content) as {
     scripts: Record<string, string>;
+    engines: Record<string, string>;
   };
 
   assert.ok(paths.has("package.json"));
@@ -60,6 +61,7 @@ test("generator returns a runnable default frontend scaffold", () => {
     packageJson.scripts.check,
     "eslint . && tsc -p tsconfig.json --noEmit && prettier --check . && vite build && vitest run",
   );
+  assert.equal(packageJson.engines.node, ">=20.19.0 || >=22.12.0");
   assert.match(readmeFile.content, /Quick Start/);
   assert.match(readmeFile.content, /Common Commands/);
   assert.match(appFile.content, /Project details/);
@@ -109,11 +111,15 @@ test("workspace scaffolds local tsconfig files, app tests, and root tooling depe
     devDependencies: Record<string, string>;
     packageManager: string;
   };
+  const webTsconfig = files.find((file) => file.path === "apps/web/tsconfig.json");
+  const apiTsconfig = files.find((file) => file.path === "apps/api/tsconfig.json");
 
   assert.ok(paths.has("apps/web/tsconfig.json"));
   assert.ok(paths.has("apps/api/tsconfig.json"));
   assert.ok(paths.has("apps/web/jest.config.ts"));
   assert.ok(paths.has("apps/api/jest.config.ts"));
+  assert.match(webTsconfig?.content ?? "", /"types": \[/);
+  assert.match(apiTsconfig?.content ?? "", /"node"/);
   assert.equal(rootPackageJson.scripts.test, "turbo run test");
   assert.equal(rootPackageJson.packageManager, "pnpm@9.0.0");
   assert.equal(rootPackageJson.devDependencies.typescript, "latest");
@@ -206,7 +212,7 @@ test("all intents emit a primary starter surface", () => {
       architecture: "microfrontend",
       paths: ["apps/host/src/App.tsx", "apps/remote-catalog/src/App.tsx", "docs/microfrontends.md"],
     },
-    { intent: "chrome-extension", paths: ["manifest.json", "src/popup.tsx", "README.md"] },
+    { intent: "chrome-extension", paths: ["public/manifest.json", "src/popup.tsx", "README.md"] },
     { intent: "cli-tool", paths: ["src/index.ts", "README.md"] },
   ];
 

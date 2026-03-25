@@ -6,6 +6,25 @@ The format follows Keep a Changelog and the version numbers follow Semantic Vers
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-03-26
+
+### Added
+
+- Added a generated-project runtime matrix runner that scaffolds representative stacks, installs dependencies, builds them, and verifies real runtime surfaces or production artifacts.
+- Added a GitHub Actions matrix job for generated stack verification alongside the existing repository validation job.
+- Added regression coverage that enforces runtime-matrix coverage across every primary project intent and every backend framework surface.
+
+### Changed
+
+- Raised generated frontend and extension project engine declarations to match the current Vite-family toolchain requirements.
+- Documented the local runtime-matrix workflow in contributor docs and development docs.
+
+### Fixed
+
+- Added Node compatibility warnings when users choose a custom Node version that is too old for the selected frontend-oriented scaffold.
+- Added Node type definitions to generated TypeScript configs so backend, fullstack, and CLI projects build cleanly when they reference `process`.
+- Tightened the runtime verifier so CLI JSON checks execute the built binary directly instead of parsing npm wrapper output.
+
 ## [0.2.3] - 2026-03-25
 
 ### Added

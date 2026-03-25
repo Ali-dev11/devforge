@@ -45,6 +45,7 @@ npm run test
 npm run build
 npm run check
 npm run smoke
+npm run runtime:matrix -- --scenario backend-hono --scenario cli-tool
 ```
 
 ## Documentation

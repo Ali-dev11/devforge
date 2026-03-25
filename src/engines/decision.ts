@@ -11,6 +11,10 @@ import type {
   ProjectPlan,
   RuleCategory,
 } from "../types.js";
+import {
+  isNodeVersionSupportedForPlan,
+  minimumSupportedNodeVersionHint,
+} from "../utils/node-compat.js";
 import { dedupe } from "../utils/strings.js";
 
 function supportsShadcn(framework: FrontendFramework): boolean {
@@ -167,6 +171,18 @@ export function normalizeProjectPlan(
   if (plan.ai.tools.length === 0) {
     warnings.push("No AI tools selected; generating AGENTS.md for Codex by default.");
     plan.ai.tools = ["codex"];
+  }
+
+  if (
+    plan.nodeStrategy === "custom" &&
+    plan.customNodeVersion &&
+    !isNodeVersionSupportedForPlan(plan, plan.customNodeVersion)
+  ) {
+    warnings.push(
+      `Selected Node.js ${plan.customNodeVersion} is below the recommended minimum for this stack (${minimumSupportedNodeVersionHint(
+        plan,
+      )}). Upgrade Node or choose LTS/latest to avoid install and build failures.`,
+    );
   }
 
   if (!plan.testing.enabled) {

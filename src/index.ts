@@ -6,5 +6,13 @@ export { detectEnvironment } from "./engines/environment.js";
 export { generateProject } from "./engines/generator.js";
 export { runInstallers } from "./engines/installer.js";
 export { buildDefaultPlan, collectProjectPlan } from "./engines/prompts.js";
+export {
+  expectedBackendFrameworkCoverage,
+  expectedIntentCoverage,
+  getRuntimeScenario,
+  runRuntimeMatrix,
+  runtimeScenarioCoverage,
+  runtimeScenarios,
+} from "./runtime-matrix.js";
 export { buildProjectFiles } from "./templates.js";
 export type * from "./types.js";

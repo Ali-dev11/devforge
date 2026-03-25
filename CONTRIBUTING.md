@@ -28,7 +28,10 @@ npm run check
 ```bash
 npm run check
 npm run smoke
+npm run runtime:matrix -- --scenario backend-hono --scenario cli-tool
 ```
+
+For generated frontend, extension, and fullstack runtime scenarios, use Node `20.19.0+` or `22.12.0+` so the current Vite-family toolchain can install and build cleanly.
 
 ## Pull Request Expectations
 
