@@ -103,6 +103,7 @@ test("workspace scaffolds local tsconfig files, app tests, and root tooling depe
   const rootPackageJson = JSON.parse(rootPackageJsonFile.content) as {
     scripts: Record<string, string>;
     devDependencies: Record<string, string>;
+    packageManager: string;
   };
 
   assert.ok(paths.has("apps/web/tsconfig.json"));
@@ -110,9 +111,33 @@ test("workspace scaffolds local tsconfig files, app tests, and root tooling depe
   assert.ok(paths.has("apps/web/jest.config.ts"));
   assert.ok(paths.has("apps/api/jest.config.ts"));
   assert.equal(rootPackageJson.scripts.test, "turbo run test");
+  assert.equal(rootPackageJson.packageManager, "pnpm@9.0.0");
   assert.equal(rootPackageJson.devDependencies.typescript, "latest");
   assert.equal(rootPackageJson.devDependencies.eslint, "latest");
   assert.equal(rootPackageJson.devDependencies.turbo, "latest");
+});
+
+test("microfrontend scaffolds skip generic workspace apps and include packageManager metadata", () => {
+  const plan = buildDefaultPlan(environment, cliOptions);
+  plan.intent = "microfrontend-system";
+  plan.architecture = "microfrontend";
+  applyIntentDefaults(plan);
+
+  const files = buildProjectFiles(plan, environment);
+  const paths = new Set(files.map((file) => file.path));
+  const rootPackageJsonFile = files.find((file) => file.path === "package.json");
+
+  assert.ok(rootPackageJsonFile);
+
+  const rootPackageJson = JSON.parse(rootPackageJsonFile.content) as {
+    packageManager: string;
+  };
+
+  assert.equal(rootPackageJson.packageManager, "pnpm@9.0.0");
+  assert.ok(paths.has("apps/host/package.json"));
+  assert.ok(paths.has("apps/remote-catalog/package.json"));
+  assert.ok(paths.has("apps/remote-dashboard/package.json"));
+  assert.equal(paths.has("apps/web/package.json"), false);
 });
 
 test("generateProject rejects file targets that are not directories", async () => {

@@ -111,6 +111,11 @@ export interface EnvironmentInfo {
   packageManagers: Record<PackageManager, BinaryStatus>;
 }
 
+export interface PackageManagerMetadata {
+  name: PackageManager;
+  version: string;
+}
+
 export interface FrontendConfig {
   framework: FrontendFramework;
   rendering: FrontendRenderingMode;

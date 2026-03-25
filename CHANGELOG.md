@@ -13,12 +13,18 @@ The format follows Keep a Changelog and the version numbers follow Semantic Vers
 - Prevented interactive prompt crashes when switching from default frontend setup to backend-oriented project flows.
 - Restricted architecture choices by project intent so incompatible combinations such as backend plus microfrontend are no longer offered.
 - Added safer default select handling and regression coverage for backend and non-frontend prompt paths.
+- Added the required `packageManager` metadata to generated workspace roots so TurboRepo can resolve workspaces correctly.
+- Fixed generated fullstack scripts to honor the selected package manager instead of hardcoding `npm`.
+- Fixed workspace and microfrontend scaffolds to generate local app `tsconfig` and test config files where needed.
+- Prevented generated output from writing duplicate paths, escaping the target directory, or targeting an existing file path as a directory.
+- Fixed CLI version output so `--version` stays aligned with `package.json`.
 
 ### Changed
 
 - Renamed the npm package to `@ali-dev11/devforge`.
 - Updated user-facing install and CLI examples to use the shorter package name.
 - Added release scripts for patch, minor, and major version bumps with pre-release validation.
+- Normalized microfrontend scaffolds to the currently supported React (Vite) client-rendered setup and removed the stray default `apps/web` package from microfrontend outputs.
 
 ## [0.1.0] - 2026-03-25
 

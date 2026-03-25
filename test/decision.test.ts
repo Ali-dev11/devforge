@@ -62,6 +62,31 @@ test("microfrontend intent forces architecture defaults", () => {
   assert.deepEqual(result.plan.workspace.remoteApps, ["catalog", "dashboard"]);
 });
 
+test("microfrontend plans normalize to supported frontend scaffolds", () => {
+  const plan = buildDefaultPlan(environment, cliOptions);
+  plan.intent = "microfrontend-system";
+  plan.architecture = "microfrontend";
+  plan.frontend = {
+    framework: "astro",
+    rendering: "isr",
+    styling: "tailwind-css",
+    uiLibrary: "none",
+    state: "tanstack-store",
+    dataFetching: "rtk-query",
+  };
+
+  const result = normalizeProjectPlan(plan, environment);
+
+  assert.equal(result.plan.frontend?.framework, "react-vite");
+  assert.equal(result.plan.frontend?.rendering, "client");
+  assert.equal(result.plan.frontend?.state, "redux-toolkit");
+  assert.equal(result.plan.frontend?.dataFetching, "rtk-query");
+  assert.match(
+    result.warnings.join(" "),
+    /Microfrontend scaffolds are currently generated for React \(Vite\)/,
+  );
+});
+
 test("intent defaults hydrate backend plans and drop frontend-only state", () => {
   const plan = buildDefaultPlan(environment, cliOptions);
   plan.intent = "backend-api";

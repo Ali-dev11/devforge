@@ -397,21 +397,30 @@ export async function collectProjectPlan(
   applyIntentDefaults(plan);
 
   if (needsFrontend(plan.intent)) {
+    const availableFrontendFrameworkChoices =
+      plan.architecture === "microfrontend"
+        ? FRONTEND_FRAMEWORK_CHOICES.filter((choice) => choice.value === "react-vite")
+        : FRONTEND_FRAMEWORK_CHOICES;
+    const availableRenderingChoices =
+      plan.architecture === "microfrontend"
+        ? FRONTEND_RENDERING_CHOICES.filter((choice) => choice.value === "client")
+        : FRONTEND_RENDERING_CHOICES;
+
     const frontendAnswers = await prompts(
       [
         {
           type: "select",
           name: "framework",
           message: "Frontend framework",
-          choices: FRONTEND_FRAMEWORK_CHOICES,
-          initial: getInitialChoiceIndex(FRONTEND_FRAMEWORK_CHOICES, plan.frontend?.framework),
+          choices: availableFrontendFrameworkChoices,
+          initial: getInitialChoiceIndex(availableFrontendFrameworkChoices, plan.frontend?.framework),
         },
         {
           type: "select",
           name: "rendering",
           message: "Rendering mode",
-          choices: FRONTEND_RENDERING_CHOICES,
-          initial: getInitialChoiceIndex(FRONTEND_RENDERING_CHOICES, plan.frontend?.rendering),
+          choices: availableRenderingChoices,
+          initial: getInitialChoiceIndex(availableRenderingChoices, plan.frontend?.rendering),
         },
         {
           type: "select",

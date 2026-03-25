@@ -84,6 +84,20 @@ export function normalizeProjectPlan(
     delete plan.extension;
   }
 
+  if (plan.architecture === "microfrontend" && plan.frontend) {
+    if (plan.frontend.framework !== "react-vite") {
+      warnings.push(
+        `Microfrontend scaffolds are currently generated for React (Vite); switching ${plan.frontend.framework} to react-vite.`,
+      );
+      plan.frontend.framework = "react-vite";
+    }
+
+    if (plan.frontend.rendering !== "client") {
+      warnings.push("Microfrontend scaffolds are generated as client-rendered apps; switching rendering mode to client.");
+      plan.frontend.rendering = "client";
+    }
+  }
+
   if (plan.frontend?.uiLibrary === "shadcn-ui" && !supportsShadcn(plan.frontend.framework)) {
     warnings.push(
       `shadcn/ui is not a strong default for ${plan.frontend.framework}; falling back to no UI library.`,
@@ -107,6 +121,13 @@ export function normalizeProjectPlan(
       plan.frontend.state = "none";
     }
 
+    if (plan.frontend.state === "redux" || plan.frontend.state === "redux-toolkit") {
+      warnings.push(
+        `${plan.frontend.framework} scaffold support does not wire Redux by default; using no state layer instead.`,
+      );
+      plan.frontend.state = "none";
+    }
+
     if (plan.frontend.dataFetching === "swr") {
       warnings.push(
         `SWR is React-focused; switching ${plan.frontend.framework} to native fetch.`,
@@ -116,7 +137,12 @@ export function normalizeProjectPlan(
   }
 
   if (plan.frontend?.dataFetching === "rtk-query") {
-    if (plan.frontend.state !== "redux-toolkit" && plan.frontend.state !== "redux") {
+    if (!REACT_FAMILY_FRAMEWORKS.has(plan.frontend.framework)) {
+      warnings.push(
+        `RTK Query scaffold support is React-oriented; switching ${plan.frontend.framework} to native fetch.`,
+      );
+      plan.frontend.dataFetching = "native-fetch";
+    } else if (plan.frontend.state !== "redux-toolkit" && plan.frontend.state !== "redux") {
       warnings.push("RTK Query works best with Redux Toolkit; switching state management to Redux Toolkit.");
       plan.frontend.state = "redux-toolkit";
     }

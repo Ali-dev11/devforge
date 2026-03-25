@@ -5,6 +5,7 @@ import type {
   GeneratedFile,
   NestAdapter,
   PackageManager,
+  PackageManagerMetadata,
   ProjectPlan,
 } from "./types.js";
 import { joinSentence, toConstantCase, toTitleCase } from "./utils/strings.js";
@@ -14,6 +15,7 @@ type PackageJsonShape = {
   version: string;
   private?: boolean;
   type?: "module";
+  packageManager?: string;
   scripts?: Record<string, string>;
   workspaces?: string[];
   dependencies?: Record<string, string>;
@@ -168,6 +170,28 @@ function localTsConfig(include: string[] = ["src", "app", "tests", "cypress"]): 
 
 function generatedProjectVersion(): string {
   return "0.1.0";
+}
+
+function resolvePackageManagerMetadata(
+  packageManager: PackageManager,
+  environment: EnvironmentInfo,
+): PackageManagerMetadata {
+  const detectedVersion = environment.packageManagers[packageManager].version?.replace(/^v/, "");
+  const fallbackVersions: Record<PackageManager, string> = {
+    npm: "10",
+    pnpm: "9",
+    yarn: "4",
+    bun: "1",
+  };
+
+  return {
+    name: packageManager,
+    version: detectedVersion || fallbackVersions[packageManager],
+  };
+}
+
+function packageManagerField(metadata: PackageManagerMetadata): string {
+  return `${metadata.name}@${metadata.version}`;
 }
 
 function licenseText(license: ProjectPlan["metadata"]["license"]): string {
@@ -1111,13 +1135,17 @@ function singlePackageScripts(plan: ProjectPlan): Record<string, string> {
   return appendQualityScripts(plan, scripts);
 }
 
-function singlePackageJson(plan: ProjectPlan): GeneratedFile {
+function singlePackageJson(
+  plan: ProjectPlan,
+  packageManagerMetadata: PackageManagerMetadata,
+): GeneratedFile {
   const { dependencies, devDependencies } = collectDependencies(plan);
   const data: PackageJsonShape = {
     name: plan.projectName,
     version: generatedProjectVersion(),
     private: true,
     type: "module",
+    packageManager: packageManagerField(packageManagerMetadata),
     scripts: sortRecord(singlePackageScripts(plan)),
     engines: {
       node: ">=20.0.0",
@@ -2414,6 +2442,7 @@ function workspaceRootDevDependencies(plan: ProjectPlan): Record<string, string>
 function workspaceRootPackageJson(
   plan: ProjectPlan,
   tool: ProjectPlan["workspace"]["tool"],
+  packageManagerMetadata: PackageManagerMetadata,
 ): GeneratedFile {
   const devDependencies: Record<string, string> = workspaceRootDevDependencies(plan);
   const scripts: Record<string, string> =
@@ -2448,6 +2477,7 @@ function workspaceRootPackageJson(
     version: generatedProjectVersion(),
     private: true,
     type: "module",
+    packageManager: packageManagerField(packageManagerMetadata),
     workspaces: ["apps/*", "packages/*"],
     scripts: sortRecord(appendQualityScripts(plan, scripts)),
     engines: {
@@ -2459,10 +2489,15 @@ function workspaceRootPackageJson(
   return makeFile("package.json", stringifyJson(data));
 }
 
-function workspaceFiles(plan: ProjectPlan): GeneratedFile[] {
+function workspaceFiles(
+  plan: ProjectPlan,
+  packageManagerMetadata: PackageManagerMetadata,
+  options?: { includeDefaultApps?: boolean },
+): GeneratedFile[] {
   const tool = plan.workspace.tool ?? "turborepo";
+  const includeDefaultApps = options?.includeDefaultApps ?? true;
   const files: GeneratedFile[] = [
-    workspaceRootPackageJson(plan, tool),
+    workspaceRootPackageJson(plan, tool, packageManagerMetadata),
     makeFile(".gitignore", rootGitignore()),
     makeFile(".nvmrc", `${nodeVersionSpec(plan)}\n`),
     ...docsFiles(plan),
@@ -2502,7 +2537,7 @@ function workspaceFiles(plan: ProjectPlan): GeneratedFile[] {
     );
   }
 
-  if (plan.frontend) {
+  if (includeDefaultApps && plan.frontend) {
     const webPlan: ProjectPlan = {
       ...plan,
       intent: "frontend-app",
@@ -2524,6 +2559,7 @@ function workspaceFiles(plan: ProjectPlan): GeneratedFile[] {
           version: generatedProjectVersion(),
           private: true,
           type: "module",
+          packageManager: packageManagerField(packageManagerMetadata),
           scripts: sortRecord(singlePackageScripts(webPlan)),
           dependencies: sortRecord(collectDependencies(webPlan).dependencies),
           devDependencies: sortRecord(collectDependencies(webPlan).devDependencies),
@@ -2537,7 +2573,7 @@ function workspaceFiles(plan: ProjectPlan): GeneratedFile[] {
     files.push(...prefixFiles("apps/web", frontendFiles(webPlan)));
   }
 
-  if (plan.backend) {
+  if (includeDefaultApps && plan.backend) {
     const apiPlan: ProjectPlan = {
       ...plan,
       intent: "backend-api",
@@ -2559,6 +2595,7 @@ function workspaceFiles(plan: ProjectPlan): GeneratedFile[] {
           version: generatedProjectVersion(),
           private: true,
           type: "module",
+          packageManager: packageManagerField(packageManagerMetadata),
           scripts: sortRecord(singlePackageScripts(apiPlan)),
           dependencies: sortRecord(collectDependencies(apiPlan).dependencies),
           devDependencies: sortRecord(collectDependencies(apiPlan).devDependencies),
@@ -2587,7 +2624,10 @@ function workspaceFiles(plan: ProjectPlan): GeneratedFile[] {
   return files;
 }
 
-function microfrontendFiles(plan: ProjectPlan): GeneratedFile[] {
+function microfrontendFiles(
+  plan: ProjectPlan,
+  packageManagerMetadata: PackageManagerMetadata,
+): GeneratedFile[] {
   const workspacePlan: ProjectPlan = {
     ...plan,
     architecture: "microfrontend",
@@ -2598,7 +2638,9 @@ function microfrontendFiles(plan: ProjectPlan): GeneratedFile[] {
     },
   };
 
-  const files = workspaceFiles(workspacePlan);
+  const files = workspaceFiles(workspacePlan, packageManagerMetadata, {
+    includeDefaultApps: false,
+  });
   files.push(
     makeFile(
       "docs/microfrontends.md",
@@ -2643,6 +2685,7 @@ function microfrontendFiles(plan: ProjectPlan): GeneratedFile[] {
         version: generatedProjectVersion(),
         private: true,
         type: "module",
+        packageManager: packageManagerField(packageManagerMetadata),
         scripts: sortRecord(singlePackageScripts(hostPlan)),
         dependencies: sortRecord(collectDependencies(hostPlan).dependencies),
         devDependencies: sortRecord(collectDependencies(hostPlan).devDependencies),
@@ -2669,6 +2712,7 @@ function microfrontendFiles(plan: ProjectPlan): GeneratedFile[] {
           version: generatedProjectVersion(),
           private: true,
           type: "module",
+          packageManager: packageManagerField(packageManagerMetadata),
           scripts: sortRecord(singlePackageScripts(remotePlan)),
           dependencies: sortRecord(collectDependencies(remotePlan).dependencies),
           devDependencies: sortRecord(collectDependencies(remotePlan).devDependencies),
@@ -2686,9 +2730,12 @@ function microfrontendFiles(plan: ProjectPlan): GeneratedFile[] {
   return files;
 }
 
-function singlePackageFiles(plan: ProjectPlan): GeneratedFile[] {
+function singlePackageFiles(
+  plan: ProjectPlan,
+  packageManagerMetadata: PackageManagerMetadata,
+): GeneratedFile[] {
   const files: GeneratedFile[] = [
-    singlePackageJson(plan),
+    singlePackageJson(plan, packageManagerMetadata),
     makeFile(".gitignore", rootGitignore()),
     makeFile(".nvmrc", `${nodeVersionSpec(plan)}\n`),
     ...docsFiles(plan),
@@ -2730,15 +2777,17 @@ function singlePackageFiles(plan: ProjectPlan): GeneratedFile[] {
 
 export function buildProjectFiles(
   plan: ProjectPlan,
-  _environment: EnvironmentInfo,
+  environment: EnvironmentInfo,
 ): GeneratedFile[] {
+  const packageManagerMetadata = resolvePackageManagerMetadata(plan.packageManager, environment);
+
   if (plan.architecture === "microfrontend") {
-    return microfrontendFiles(plan);
+    return microfrontendFiles(plan, packageManagerMetadata);
   }
 
   if (plan.architecture === "monorepo") {
-    return workspaceFiles(plan);
+    return workspaceFiles(plan, packageManagerMetadata);
   }
 
-  return singlePackageFiles(plan);
+  return singlePackageFiles(plan, packageManagerMetadata);
 }
