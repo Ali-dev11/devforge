@@ -43,6 +43,16 @@ npm run smoke
 - keep unrelated refactors out of the same pull request
 - update docs when public behavior or setup changes
 
+## Versioning And Releases
+
+- This project uses Semantic Versioning.
+- Use a patch release for bug fixes and release-process improvements that do not change the public contract.
+- Use a minor release for backward-compatible CLI capabilities, templates, or generated output improvements.
+- Use a major release for breaking CLI, prompt, config, or generated-project changes.
+- Add release notes to `CHANGELOG.md` before publishing.
+- Use `npm run release:patch`, `npm run release:minor`, or `npm run release:major` to bump versions.
+- The version commands run `npm run release:check` first so lint, typecheck, tests, build, and pack validation all pass before the version changes.
+
 ## Communication
 
 - be respectful and constructive

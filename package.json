@@ -1,6 +1,6 @@
 {
   "name": "@ali-dev11/create-devforge",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Production-focused AI-native project scaffolding CLI for JavaScript and TypeScript teams.",
   "license": "MIT",
   "author": "Ali-dev11",
@@ -50,6 +50,11 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --import tsx --test test/**/*.test.ts",
     "check": "npm run lint && npm run typecheck && npm run test && npm run build",
+    "release:check": "npm run check && npm pack --dry-run --ignore-scripts --cache /tmp/devforge-npm-cache",
+    "release:patch": "npm version patch",
+    "release:minor": "npm version minor",
+    "release:major": "npm version major",
+    "preversion": "npm run release:check",
     "prepack": "npm run check",
     "smoke": "npm run build && node --eval \"require('node:fs').rmSync('/tmp/devforge-smoke', { recursive: true, force: true })\" && node dist/bin/devforge.js init --yes --skip-install --output /tmp/devforge-smoke"
   },
