@@ -17,7 +17,7 @@ Welcome to the DevForge CLI documentation site.
 
 ## Project Links
 
-- [Repository README](../README.md)
-- [Contributing Guide](../CONTRIBUTING.md)
-- [Code of Conduct](../CODE_OF_CONDUCT.md)
-- [Security Policy](../SECURITY.md)
+- [Repository README](https://github.com/Ali-dev11/devforge#readme)
+- [Contributing Guide](https://github.com/Ali-dev11/devforge/blob/main/CONTRIBUTING.md)
+- [Code of Conduct](https://github.com/Ali-dev11/devforge/blob/main/CODE_OF_CONDUCT.md)
+- [Security Policy](https://github.com/Ali-dev11/devforge/blob/main/SECURITY.md)

@@ -33,4 +33,4 @@ npm run smoke
 - update docs when setup or output changes
 - communicate clearly and respectfully
 
-For the full contributor guide, see [../CONTRIBUTING.md](../CONTRIBUTING.md).
+For the full contributor guide, see [CONTRIBUTING.md on GitHub](https://github.com/Ali-dev11/devforge/blob/main/CONTRIBUTING.md).
