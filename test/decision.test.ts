@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { normalizeProjectPlan } from "../src/engines/decision.js";
+import {
+  getAvailableRuleCategories,
+  normalizeProjectPlan,
+} from "../src/engines/decision.js";
 import {
   applyIntentDefaults,
   buildDefaultPlan,
@@ -30,7 +33,7 @@ const cliOptions: CliOptions = {
   projectName: "devforge-test",
 };
 
-test("normalization drops incompatible frontend choices and infers rule categories", () => {
+test("normalization drops incompatible frontend choices and filters AI rule categories", () => {
   const plan = buildDefaultPlan(environment, cliOptions);
   plan.frontend = {
     framework: "vue-vite",
@@ -46,7 +49,7 @@ test("normalization drops incompatible frontend choices and infers rule categori
   assert.equal(result.plan.frontend?.uiLibrary, "none");
   assert.equal(result.plan.frontend?.state, "none");
   assert.equal(result.plan.frontend?.dataFetching, "native-fetch");
-  assert.ok(result.plan.ai.categories.includes("frontend"));
+  assert.ok(!result.plan.ai.categories.includes("backend"));
 });
 
 test("microfrontend intent forces architecture defaults", () => {
@@ -134,4 +137,46 @@ test("nestjs javascript selections normalize back to typescript", () => {
 
   assert.equal(result.plan.backend?.language, "typescript");
   assert.match(result.warnings.join(" "), /NestJS is generated as a TypeScript-first stack/);
+});
+
+test("frontend-only intents expose only applicable AI rule categories", () => {
+  const landingPagePlan = buildDefaultPlan(environment, cliOptions);
+  landingPagePlan.intent = "landing-page";
+  landingPagePlan.architecture = "simple";
+  applyIntentDefaults(landingPagePlan);
+
+  assert.deepEqual(getAvailableRuleCategories(landingPagePlan), [
+    "core",
+    "security",
+    "testing",
+    "frontend",
+  ]);
+
+  const extensionPlan = buildDefaultPlan(environment, cliOptions);
+  extensionPlan.intent = "chrome-extension";
+  applyIntentDefaults(extensionPlan);
+
+  assert.deepEqual(getAvailableRuleCategories(extensionPlan), [
+    "core",
+    "security",
+    "testing",
+    "frontend",
+    "architecture",
+  ]);
+});
+
+test("normalization removes backend AI categories from frontend-only plans", () => {
+  const plan = buildDefaultPlan(environment, cliOptions);
+  plan.intent = "landing-page";
+  plan.architecture = "simple";
+  applyIntentDefaults(plan);
+  plan.ai.categories = ["core", "frontend", "backend", "security"];
+
+  const result = normalizeProjectPlan(plan, environment);
+
+  assert.deepEqual(result.plan.ai.categories, ["core", "frontend", "security"]);
+  assert.match(
+    result.warnings.join(" "),
+    /Removed AI rule categories that do not apply to the selected project stack/,
+  );
 });

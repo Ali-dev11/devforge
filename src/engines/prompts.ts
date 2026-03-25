@@ -41,6 +41,7 @@ import type {
   TestingConfig,
   ToolingConfig,
 } from "../types.js";
+import { getAvailableRuleCategories } from "./decision.js";
 import { dedupe, slugifyProjectName } from "../utils/strings.js";
 
 function cancelHandler(): never {
@@ -742,6 +743,11 @@ export async function collectProjectPlan(
     includeExampleTests: Boolean(testingAnswers.includeExampleTests ?? plan.testing.includeExampleTests),
   };
 
+  const availableRuleCategories = getAvailableRuleCategories(plan);
+  const selectedRuleCategories = dedupe(
+    plan.ai.categories.filter((category) => availableRuleCategories.includes(category)),
+  );
+
   const aiAnswers = await prompts(
     [
       {
@@ -761,7 +767,10 @@ export async function collectProjectPlan(
         type: "multiselect",
         name: "categories",
         message: "Rule categories",
-        choices: withSelected(RULE_CATEGORY_CHOICES, plan.ai.categories),
+        choices: withSelected(
+          RULE_CATEGORY_CHOICES.filter((choice) => availableRuleCategories.includes(choice.value)),
+          selectedRuleCategories.length > 0 ? selectedRuleCategories : availableRuleCategories,
+        ),
       },
     ],
     { onCancel: cancelHandler },

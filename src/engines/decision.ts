@@ -17,7 +17,7 @@ function supportsShadcn(framework: FrontendFramework): boolean {
   return REACT_FAMILY_FRAMEWORKS.has(framework);
 }
 
-function inferRuleCategories(plan: ProjectPlan): RuleCategory[] {
+export function getAvailableRuleCategories(plan: ProjectPlan): RuleCategory[] {
   const categories: RuleCategory[] = [...DEFAULT_RULE_CATEGORIES];
 
   if (plan.frontend || plan.intent === "chrome-extension") {
@@ -194,7 +194,17 @@ export function normalizeProjectPlan(
     plan.testing.environment = "node";
   }
 
-  plan.ai.categories = inferRuleCategories(plan);
+  const availableRuleCategories = getAvailableRuleCategories(plan);
+  const filteredRuleCategories = dedupe(
+    plan.ai.categories.filter((category) => availableRuleCategories.includes(category)),
+  );
+
+  if (filteredRuleCategories.length !== plan.ai.categories.length) {
+    warnings.push("Removed AI rule categories that do not apply to the selected project stack.");
+  }
+
+  plan.ai.categories =
+    filteredRuleCategories.length > 0 ? filteredRuleCategories : availableRuleCategories;
 
   return { plan, warnings };
 }
