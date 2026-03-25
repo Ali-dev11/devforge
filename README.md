@@ -11,7 +11,22 @@ DevForge CLI is a production-focused, AI-native scaffolding tool for modern Java
 - frontend state/data choices including Redux, Redux Toolkit, MobX, Jotai, TanStack Query, RTK Query, and more
 - generated docs, AI rules, CI, and repo hygiene out of the box
 
-## Quick Start
+## Usage
+
+```bash
+npx @ali-dev11/create-devforge@latest
+```
+
+Global install:
+
+```bash
+npm install -g @ali-dev11/create-devforge
+create-devforge
+# or
+devforge
+```
+
+## Local Development
 
 ```bash
 npm install

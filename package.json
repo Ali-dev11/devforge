@@ -1,5 +1,5 @@
 {
-  "name": "create-devforge",
+  "name": "@ali-dev11/create-devforge",
   "version": "0.1.0",
   "description": "Production-focused AI-native project scaffolding CLI for JavaScript and TypeScript teams.",
   "license": "MIT",
@@ -15,6 +15,9 @@
   "bugs": {
     "url": "https://github.com/Ali-dev11/devforge/issues"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -22,8 +25,8 @@
     }
   },
   "bin": {
-    "create-devforge": "./dist/bin/create-devforge.js",
-    "devforge": "./dist/bin/devforge.js"
+    "create-devforge": "dist/bin/create-devforge.js",
+    "devforge": "dist/bin/devforge.js"
   },
   "preferGlobal": true,
   "sideEffects": false,
