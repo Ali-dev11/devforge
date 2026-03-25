@@ -30,9 +30,12 @@ import {
 } from "../constants.js";
 import type {
   AiConfig,
+  ArchitectureMode,
+  BackendConfig,
   CliOptions,
   ChromeExtensionConfig,
   EnvironmentInfo,
+  FrontendConfig,
   ProjectIntent,
   ProjectPlan,
   TestingConfig,
@@ -55,6 +58,41 @@ function defaultTooling(): ToolingConfig {
     commitlint: true,
     docker: false,
     githubActions: true,
+  };
+}
+
+function defaultFrontendConfig(intent: ProjectIntent): FrontendConfig {
+  if (intent === "landing-page") {
+    return {
+      framework: "react-vite",
+      rendering: "static",
+      styling: "tailwind-css",
+      uiLibrary: "shadcn-ui",
+      state: "none",
+      dataFetching: "native-fetch",
+    };
+  }
+
+  return {
+    framework: "react-vite",
+    rendering: "client",
+    styling: "tailwind-css",
+    uiLibrary: "shadcn-ui",
+    state: "zustand",
+    dataFetching: "tanstack-query",
+  };
+}
+
+function defaultBackendConfig(): BackendConfig {
+  return {
+    framework: "hono",
+    language: "typescript",
+    auth: [],
+    orm: "none",
+    database: "none",
+    redis: false,
+    swagger: true,
+    websockets: false,
   };
 }
 
@@ -122,14 +160,7 @@ export function buildDefaultPlan(
     intent: "frontend-app",
     architecture: "simple",
     templateTier: "starter",
-    frontend: {
-      framework: "react-vite",
-      rendering: "client",
-      styling: "tailwind-css",
-      uiLibrary: "shadcn-ui",
-      state: "zustand",
-      dataFetching: "tanstack-query",
-    },
+    frontend: defaultFrontendConfig("frontend-app"),
     workspace: {
       tool: "turborepo",
       remoteApps: DEFAULT_REMOTE_APPS,
@@ -169,6 +200,74 @@ function needsChromeExtension(intent: ProjectIntent): boolean {
   return intent === "chrome-extension";
 }
 
+function getInitialChoiceIndex<T extends { value: string }>(
+  choices: T[],
+  currentValue: string | undefined,
+): number {
+  const index = choices.findIndex((choice) => choice.value === currentValue);
+  return index >= 0 ? index : 0;
+}
+
+function withSelected<T extends { title: string; value: string }>(
+  choices: T[],
+  selectedValues: string[],
+): Array<T & { selected: boolean }> {
+  return choices.map((choice) => ({
+    ...choice,
+    selected: selectedValues.includes(choice.value),
+  }));
+}
+
+export function getArchitectureChoicesForIntent(
+  intent: ProjectIntent,
+): Array<{ title: string; value: ArchitectureMode }> {
+  if (intent === "microfrontend-system") {
+    return ARCHITECTURE_CHOICES.filter((choice) => choice.value === "microfrontend");
+  }
+
+  if (intent === "chrome-extension") {
+    return ARCHITECTURE_CHOICES.filter((choice) => choice.value === "modular");
+  }
+
+  if (intent === "backend-api" || intent === "cli-tool") {
+    return ARCHITECTURE_CHOICES.filter((choice) => choice.value !== "microfrontend");
+  }
+
+  return ARCHITECTURE_CHOICES;
+}
+
+export function applyIntentDefaults(plan: ProjectPlan): ProjectPlan {
+  if (needsFrontend(plan.intent)) {
+    plan.frontend ??= defaultFrontendConfig(plan.intent);
+
+    if (plan.intent === "landing-page") {
+      plan.frontend.state = "none";
+      plan.frontend.dataFetching = "native-fetch";
+    }
+  } else {
+    delete plan.frontend;
+  }
+
+  if (needsBackend(plan.intent)) {
+    plan.backend ??= defaultBackendConfig();
+  } else {
+    delete plan.backend;
+  }
+
+  if (needsChromeExtension(plan.intent)) {
+    plan.extension ??= defaultExtensionConfig();
+  } else {
+    delete plan.extension;
+  }
+
+  const allowedArchitectures = getArchitectureChoicesForIntent(plan.intent);
+  if (!allowedArchitectures.some((choice) => choice.value === plan.architecture)) {
+    plan.architecture = allowedArchitectures[0]?.value ?? "simple";
+  }
+
+  return plan;
+}
+
 export async function collectProjectPlan(
   environment: EnvironmentInfo,
   options: CliOptions,
@@ -205,7 +304,14 @@ export async function collectProjectPlan(
           { title: "Latest", value: "latest" },
           { title: "Custom", value: "custom" },
         ],
-        initial: 0,
+        initial: getInitialChoiceIndex(
+          [
+            { title: "LTS", value: "lts" },
+            { title: "Latest", value: "latest" },
+            { title: "Custom", value: "custom" },
+          ],
+          base.nodeStrategy,
+        ),
       },
       {
         type: (prev: string) => (prev === "custom" ? "text" : null),
@@ -221,24 +327,36 @@ export async function collectProjectPlan(
           title: `${choice.title}${environment.packageManagers[choice.value].installed ? "" : " (not installed)"}`,
           value: choice.value,
         })),
+        initial: getInitialChoiceIndex(PACKAGE_MANAGER_CHOICES, base.packageManager),
       },
       {
         type: "select",
         name: "intent",
         message: "What are you building?",
         choices: PROJECT_INTENT_CHOICES,
+        initial: getInitialChoiceIndex(PROJECT_INTENT_CHOICES, base.intent),
       },
+    ],
+    { onCancel: cancelHandler },
+  );
+
+  const selectedIntent = setupAnswers.intent ?? base.intent;
+  const architectureChoices = getArchitectureChoicesForIntent(selectedIntent);
+  const setupDetailsAnswers = await prompts(
+    [
       {
-        type: "select",
+        type: architectureChoices.length > 1 ? "select" : null,
         name: "architecture",
         message: "Architecture style",
-        choices: ARCHITECTURE_CHOICES,
+        choices: architectureChoices,
+        initial: getInitialChoiceIndex(architectureChoices, base.architecture),
       },
       {
         type: "select",
         name: "templateTier",
         message: "Template tier",
         choices: TEMPLATE_TIER_CHOICES,
+        initial: getInitialChoiceIndex(TEMPLATE_TIER_CHOICES, base.templateTier),
       },
       {
         type: "text",
@@ -251,6 +369,7 @@ export async function collectProjectPlan(
         name: "license",
         message: "License",
         choices: LICENSE_CHOICES,
+        initial: getInitialChoiceIndex(LICENSE_CHOICES, base.metadata.license),
       },
     ],
     { onCancel: cancelHandler },
@@ -265,15 +384,17 @@ export async function collectProjectPlan(
     nodeStrategy: setupAnswers.nodeStrategy ?? base.nodeStrategy,
     customNodeVersion: setupAnswers.customNodeVersion ?? base.customNodeVersion,
     packageManager: setupAnswers.packageManager ?? base.packageManager,
-    intent: setupAnswers.intent ?? base.intent,
-    architecture: setupAnswers.architecture ?? base.architecture,
-    templateTier: setupAnswers.templateTier ?? base.templateTier,
+    intent: selectedIntent,
+    architecture:
+      setupDetailsAnswers.architecture ?? architectureChoices[0]?.value ?? base.architecture,
+    templateTier: setupDetailsAnswers.templateTier ?? base.templateTier,
     metadata: {
       ...base.metadata,
-      description: setupAnswers.description || base.metadata.description,
-      license: setupAnswers.license ?? base.metadata.license,
+      description: setupDetailsAnswers.description || base.metadata.description,
+      license: setupDetailsAnswers.license ?? base.metadata.license,
     },
   };
+  applyIntentDefaults(plan);
 
   if (needsFrontend(plan.intent)) {
     const frontendAnswers = await prompts(
@@ -283,54 +404,42 @@ export async function collectProjectPlan(
           name: "framework",
           message: "Frontend framework",
           choices: FRONTEND_FRAMEWORK_CHOICES,
-          initial: FRONTEND_FRAMEWORK_CHOICES.findIndex(
-            (choice) => choice.value === plan.frontend?.framework,
-          ),
+          initial: getInitialChoiceIndex(FRONTEND_FRAMEWORK_CHOICES, plan.frontend?.framework),
         },
         {
           type: "select",
           name: "rendering",
           message: "Rendering mode",
           choices: FRONTEND_RENDERING_CHOICES,
-          initial: FRONTEND_RENDERING_CHOICES.findIndex(
-            (choice) => choice.value === plan.frontend?.rendering,
-          ),
+          initial: getInitialChoiceIndex(FRONTEND_RENDERING_CHOICES, plan.frontend?.rendering),
         },
         {
           type: "select",
           name: "styling",
           message: "Styling",
           choices: STYLING_CHOICES,
-          initial: STYLING_CHOICES.findIndex(
-            (choice) => choice.value === plan.frontend?.styling,
-          ),
+          initial: getInitialChoiceIndex(STYLING_CHOICES, plan.frontend?.styling),
         },
         {
           type: "select",
           name: "uiLibrary",
           message: "UI library",
           choices: UI_LIBRARY_CHOICES,
-          initial: UI_LIBRARY_CHOICES.findIndex(
-            (choice) => choice.value === plan.frontend?.uiLibrary,
-          ),
+          initial: getInitialChoiceIndex(UI_LIBRARY_CHOICES, plan.frontend?.uiLibrary),
         },
         {
           type: plan.intent === "landing-page" ? null : "select",
           name: "state",
           message: "State layer",
           choices: STATE_CHOICES,
-          initial: STATE_CHOICES.findIndex(
-            (choice) => choice.value === plan.frontend?.state,
-          ),
+          initial: getInitialChoiceIndex(STATE_CHOICES, plan.frontend?.state),
         },
         {
           type: plan.intent === "landing-page" ? null : "select",
           name: "dataFetching",
           message: "Data fetching",
           choices: DATA_FETCHING_CHOICES,
-          initial: DATA_FETCHING_CHOICES.findIndex(
-            (choice) => choice.value === plan.frontend?.dataFetching,
-          ),
+          initial: getInitialChoiceIndex(DATA_FETCHING_CHOICES, plan.frontend?.dataFetching),
         },
       ],
       { onCancel: cancelHandler },
@@ -352,6 +461,15 @@ export async function collectProjectPlan(
   }
 
   if (needsBackend(plan.intent)) {
+    const languageChoices = [
+      { title: "TypeScript", value: "typescript" },
+      { title: "JavaScript", value: "javascript" },
+    ];
+    const adapterChoices = [
+      { title: "Fastify", value: "fastify" },
+      { title: "Express", value: "express" },
+    ];
+
     const backendAnswers = await prompts(
       [
         {
@@ -359,51 +477,42 @@ export async function collectProjectPlan(
           name: "framework",
           message: "Backend framework",
           choices: BACKEND_FRAMEWORK_CHOICES,
-          initial: BACKEND_FRAMEWORK_CHOICES.findIndex(
-            (choice) => choice.value === plan.backend?.framework,
-          ),
+          initial: getInitialChoiceIndex(BACKEND_FRAMEWORK_CHOICES, plan.backend?.framework),
         },
         {
           type: "select",
           name: "language",
           message: "Language",
-          choices: [
-            { title: "TypeScript", value: "typescript" },
-            { title: "JavaScript", value: "javascript" },
-          ],
-          initial: 0,
+          choices: languageChoices,
+          initial: getInitialChoiceIndex(languageChoices, plan.backend?.language),
         },
         {
           type: (_: unknown, values: Record<string, unknown>) =>
             values.framework === "nestjs" ? "select" : null,
           name: "adapter",
           message: "NestJS adapter",
-          choices: [
-            { title: "Fastify", value: "fastify" },
-            { title: "Express", value: "express" },
-          ],
+          choices: adapterChoices,
+          initial: getInitialChoiceIndex(adapterChoices, plan.backend?.adapter),
         },
         {
           type: "multiselect",
           name: "auth",
           message: "Authentication",
-          choices: AUTH_CHOICES,
+          choices: withSelected(AUTH_CHOICES, plan.backend?.auth ?? []),
         },
         {
           type: "select",
           name: "orm",
           message: "ORM",
           choices: ORM_CHOICES,
-          initial: ORM_CHOICES.findIndex((choice) => choice.value === plan.backend?.orm),
+          initial: getInitialChoiceIndex(ORM_CHOICES, plan.backend?.orm),
         },
         {
           type: "select",
           name: "database",
           message: "Database",
           choices: DATABASE_CHOICES,
-          initial: DATABASE_CHOICES.findIndex(
-            (choice) => choice.value === plan.backend?.database,
-          ),
+          initial: getInitialChoiceIndex(DATABASE_CHOICES, plan.backend?.database),
         },
         {
           type: "toggle",
@@ -456,7 +565,7 @@ export async function collectProjectPlan(
           name: "tool",
           message: "Monorepo tool",
           choices: WORKSPACE_TOOL_CHOICES,
-          initial: 0,
+          initial: getInitialChoiceIndex(WORKSPACE_TOOL_CHOICES, plan.workspace.tool),
         },
       ],
       { onCancel: cancelHandler },
@@ -473,7 +582,10 @@ export async function collectProjectPlan(
           name: "microfrontendStrategy",
           message: "Microfrontend strategy",
           choices: MICROFRONTEND_STRATEGY_CHOICES,
-          initial: 1,
+          initial: getInitialChoiceIndex(
+            MICROFRONTEND_STRATEGY_CHOICES,
+            plan.workspace.microfrontendStrategy,
+          ),
         },
         {
           type: "text",
@@ -541,6 +653,22 @@ export async function collectProjectPlan(
     };
   }
 
+  const availableTestRunnerChoices = TEST_RUNNER_CHOICES.filter((choice) => {
+    if (!plan.frontend && !needsChromeExtension(plan.intent)) {
+      return choice.value === "jest" || choice.value === "vitest";
+    }
+
+    return true;
+  });
+
+  const availableTestEnvironmentChoices = TEST_ENVIRONMENT_CHOICES.filter((choice) => {
+    if (!plan.frontend && !needsChromeExtension(plan.intent)) {
+      return choice.value === "node";
+    }
+
+    return true;
+  });
+
   const testingAnswers = await prompts(
     [
       {
@@ -556,13 +684,11 @@ export async function collectProjectPlan(
           values.enabled ? "select" : null,
         name: "runner",
         message: "Test runner",
-        choices: TEST_RUNNER_CHOICES.filter((choice) => {
-          if (!plan.frontend && !needsChromeExtension(plan.intent)) {
-            return choice.value === "jest" || choice.value === "vitest";
-          }
-
-          return true;
-        }),
+        choices: availableTestRunnerChoices,
+        initial: getInitialChoiceIndex(
+          availableTestRunnerChoices,
+          plan.testing.runner === "none" ? undefined : plan.testing.runner,
+        ),
       },
       {
         type: (_: unknown, values: Record<string, unknown>) =>
@@ -573,13 +699,13 @@ export async function collectProjectPlan(
             : null,
         name: "environment",
         message: "Test environment",
-        choices: TEST_ENVIRONMENT_CHOICES.filter((choice) => {
-          if (!plan.frontend && !needsChromeExtension(plan.intent)) {
-            return choice.value === "node";
-          }
-
-          return true;
-        }),
+        choices: availableTestEnvironmentChoices,
+        initial: getInitialChoiceIndex(
+          availableTestEnvironmentChoices,
+          plan.testing.environment === "none" || plan.testing.environment === "browser-e2e"
+            ? undefined
+            : plan.testing.environment,
+        ),
       },
       {
         type: (_: unknown, values: Record<string, unknown>) =>
@@ -613,20 +739,20 @@ export async function collectProjectPlan(
         type: "multiselect",
         name: "tools",
         message: "AI tools to configure",
-        choices: AI_TOOL_CHOICES,
+        choices: withSelected(AI_TOOL_CHOICES, plan.ai.tools),
       },
       {
         type: "select",
         name: "ruleMode",
         message: "Rule mode",
         choices: RULE_MODE_CHOICES,
-        initial: RULE_MODE_CHOICES.findIndex((choice) => choice.value === plan.ai.ruleMode),
+        initial: getInitialChoiceIndex(RULE_MODE_CHOICES, plan.ai.ruleMode),
       },
       {
         type: "multiselect",
         name: "categories",
         message: "Rule categories",
-        choices: RULE_CATEGORY_CHOICES,
+        choices: withSelected(RULE_CATEGORY_CHOICES, plan.ai.categories),
       },
     ],
     { onCancel: cancelHandler },
@@ -644,14 +770,24 @@ export async function collectProjectPlan(
         type: "multiselect",
         name: "tooling",
         message: "DevOps and tooling",
-        choices: [
-          { title: "ESLint", value: "eslint" },
-          { title: "Prettier", value: "prettier" },
-          { title: "Husky", value: "husky" },
-          { title: "Commitlint", value: "commitlint" },
-          { title: "Docker", value: "docker" },
-          { title: "GitHub Actions", value: "githubActions" },
-        ],
+        choices: withSelected(
+          [
+            { title: "ESLint", value: "eslint" },
+            { title: "Prettier", value: "prettier" },
+            { title: "Husky", value: "husky" },
+            { title: "Commitlint", value: "commitlint" },
+            { title: "Docker", value: "docker" },
+            { title: "GitHub Actions", value: "githubActions" },
+          ],
+          [
+            ...(plan.tooling.eslint ? ["eslint"] : []),
+            ...(plan.tooling.prettier ? ["prettier"] : []),
+            ...(plan.tooling.husky ? ["husky"] : []),
+            ...(plan.tooling.commitlint ? ["commitlint"] : []),
+            ...(plan.tooling.docker ? ["docker"] : []),
+            ...(plan.tooling.githubActions ? ["githubActions"] : []),
+          ],
+        ),
       },
     ],
     { onCancel: cancelHandler },
@@ -678,27 +814,21 @@ export async function collectProjectPlan(
           name: "eslintProfile",
           message: "ESLint strictness",
           choices: STRICTNESS_CHOICES,
-          initial: STRICTNESS_CHOICES.findIndex(
-            (choice) => choice.value === plan.tooling.eslintProfile,
-          ),
+          initial: getInitialChoiceIndex(STRICTNESS_CHOICES, plan.tooling.eslintProfile),
         },
         {
           type: plan.tooling.prettier ? "select" : null,
           name: "prettierProfile",
           message: "Prettier strictness",
           choices: STRICTNESS_CHOICES,
-          initial: STRICTNESS_CHOICES.findIndex(
-            (choice) => choice.value === plan.tooling.prettierProfile,
-          ),
+          initial: getInitialChoiceIndex(STRICTNESS_CHOICES, plan.tooling.prettierProfile),
         },
         {
           type: plan.tooling.husky ? "select" : null,
           name: "huskyProfile",
           message: "Husky strictness",
           choices: STRICTNESS_CHOICES,
-          initial: STRICTNESS_CHOICES.findIndex(
-            (choice) => choice.value === plan.tooling.huskyProfile,
-          ),
+          initial: getInitialChoiceIndex(STRICTNESS_CHOICES, plan.tooling.huskyProfile),
         },
       ],
       { onCancel: cancelHandler },

@@ -1,7 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { normalizeProjectPlan } from "../src/engines/decision.js";
-import { buildDefaultPlan } from "../src/engines/prompts.js";
+import {
+  applyIntentDefaults,
+  buildDefaultPlan,
+  getArchitectureChoicesForIntent,
+} from "../src/engines/prompts.js";
 import type { CliOptions, EnvironmentInfo } from "../src/types.js";
 
 const environment: EnvironmentInfo = {
@@ -56,4 +60,32 @@ test("microfrontend intent forces architecture defaults", () => {
   assert.equal(result.plan.architecture, "microfrontend");
   assert.equal(result.plan.workspace.microfrontendStrategy, "vite-federation");
   assert.deepEqual(result.plan.workspace.remoteApps, ["catalog", "dashboard"]);
+});
+
+test("intent defaults hydrate backend plans and drop frontend-only state", () => {
+  const plan = buildDefaultPlan(environment, cliOptions);
+  plan.intent = "backend-api";
+
+  applyIntentDefaults(plan);
+
+  assert.equal(plan.frontend, undefined);
+  assert.ok(plan.backend);
+  assert.equal(plan.backend?.framework, "hono");
+  assert.equal(plan.backend?.language, "typescript");
+  assert.equal(plan.backend?.swagger, true);
+});
+
+test("architecture choices stay compatible with project intent", () => {
+  assert.deepEqual(
+    getArchitectureChoicesForIntent("backend-api").map((choice) => choice.value),
+    ["simple", "modular", "monorepo"],
+  );
+  assert.deepEqual(
+    getArchitectureChoicesForIntent("microfrontend-system").map((choice) => choice.value),
+    ["microfrontend"],
+  );
+  assert.deepEqual(
+    getArchitectureChoicesForIntent("chrome-extension").map((choice) => choice.value),
+    ["modular"],
+  );
 });
