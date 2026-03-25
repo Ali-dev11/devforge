@@ -2541,7 +2541,7 @@ function ciWorkflow(plan: ProjectPlan): string {
     "  validate:",
     "    runs-on: ubuntu-latest",
     "    steps:",
-    "      - uses: actions/checkout@v4",
+    "      - uses: actions/checkout@v5",
   ];
 
   if (plan.packageManager === "bun") {
@@ -2552,9 +2552,9 @@ function ciWorkflow(plan: ProjectPlan): string {
     );
   } else {
     lines.push(
-      "      - uses: actions/setup-node@v4",
+      "      - uses: actions/setup-node@v6",
       "        with:",
-      "          node-version: 22",
+      "          node-version: 22.12.0",
       `          cache: ${plan.packageManager}`,
     );
 

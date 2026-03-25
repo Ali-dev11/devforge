@@ -6,6 +6,18 @@ The format follows Keep a Changelog and the version numbers follow Semantic Vers
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-03-26
+
+### Changed
+
+- Reduced CI runner pressure by grouping generated runtime scenarios into a smaller set of runtime-matrix jobs instead of spawning one hosted-runner job per scenario.
+- Made generated runtime verification wait for repository validation to pass before consuming matrix capacity, so bad commits fail faster and do not queue unnecessary stack jobs.
+- Updated this repository and generated project GitHub Actions workflows to use newer `actions/checkout` and `actions/setup-node` releases.
+
+### Fixed
+
+- Added workflow-level concurrency cancellation so superseded pushes stop older CI runs instead of leaving stale jobs queued behind newer commits.
+
 ## [0.3.0] - 2026-03-26
 
 ### Added

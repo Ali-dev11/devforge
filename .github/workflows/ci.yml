@@ -4,47 +4,42 @@ on:
   push:
   pull_request:
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate:
-    strategy:
-      fail-fast: false
-      matrix:
-        node-version: ["20.19.0", "22.12.0"]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v6
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: "22.12.0"
           cache: npm
       - run: npm ci
       - run: npm run check
 
   generated-runtime-matrix:
+    name: generated-runtime-matrix (${{ matrix.group.name }})
+    needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
       fail-fast: false
+      max-parallel: 3
       matrix:
-        scenario:
-          - landing-react-vite
-          - frontend-nextjs
-          - frontend-astro
-          - frontend-vue-vite
-          - frontend-nuxt
-          - frontend-svelte
-          - frontend-solidjs
-          - backend-express
-          - backend-fastify
-          - backend-hono
-          - backend-koa-javascript
-          - backend-nestjs
-          - fullstack-nextjs
-          - fullstack-react-api
-          - microfrontend-workspace
-          - chrome-extension-react
-          - chrome-extension-vanilla-ts
-          - cli-tool
+        group:
+          - name: frontend-core
+            args: --scenario landing-react-vite --scenario frontend-nextjs --scenario frontend-astro
+          - name: frontend-apps
+            args: --scenario frontend-vue-vite --scenario frontend-nuxt --scenario frontend-svelte --scenario frontend-solidjs
+          - name: backends
+            args: --scenario backend-express --scenario backend-fastify --scenario backend-hono --scenario backend-koa-javascript --scenario backend-nestjs
+          - name: fullstack-workspaces
+            args: --scenario fullstack-nextjs --scenario fullstack-react-api --scenario microfrontend-workspace
+          - name: extensions-cli
+            args: --scenario chrome-extension-react --scenario chrome-extension-vanilla-ts --scenario cli-tool
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v6
@@ -53,4 +48,4 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
-      - run: node dist/bin/runtime-matrix.js --scenario ${{ matrix.scenario }}
+      - run: node dist/bin/runtime-matrix.js ${{ matrix.group.args }}
