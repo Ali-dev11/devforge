@@ -85,10 +85,10 @@ export const ARCHITECTURE_CHOICES: Array<{
   title: string;
   value: ArchitectureMode;
 }> = [
-  { title: "Simple", value: "simple" },
-  { title: "Modular", value: "modular" },
-  { title: "Monorepo", value: "monorepo" },
-  { title: "Microfrontend", value: "microfrontend" },
+  { title: "Simple (single app)", value: "simple" },
+  { title: "Modular (feature modules)", value: "modular" },
+  { title: "Monorepo (apps + packages)", value: "monorepo" },
+  { title: "Microfrontend (frontend only)", value: "microfrontend" },
 ];
 
 export const FRONTEND_FRAMEWORK_CHOICES: Array<{
@@ -217,7 +217,7 @@ export const ORM_CHOICES: Array<{
 }> = [
   { title: "None", value: "none" },
   { title: "Prisma", value: "prisma" },
-  { title: "Drizzle", value: "drizzle" },
+  { title: "Drizzle (SQL)", value: "drizzle" },
 ];
 
 export const DATABASE_CHOICES: Array<{

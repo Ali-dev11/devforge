@@ -5,10 +5,10 @@ import { extractReleaseSection, renderDocsChangelog } from "../scripts/changelog
 
 test("extractReleaseSection returns the requested release block", () => {
   const changelog = readFileSync(new URL("../CHANGELOG.md", import.meta.url), "utf8");
-  const section = extractReleaseSection(changelog, "0.3.3");
+  const section = extractReleaseSection(changelog, "0.3.4");
 
-  assert.match(section, /^## \[0\.3\.3\] - 2026-03-26/m);
-  assert.match(section, /tag-driven GitHub release workflow/);
+  assert.match(section, /^## \[0\.3\.4\] - 2026-03-26/m);
+  assert.match(section, /real-time file generation progress bar/);
 });
 
 test("renderDocsChangelog creates a docs-friendly changelog page", () => {
@@ -19,6 +19,6 @@ test("renderDocsChangelog creates a docs-friendly changelog page", () => {
   assert.match(docsPage, /^---\ntitle: Changelog\n---/);
   assert.match(docsPage, /# Changelog/);
   assert.match(docsPage, /\[GitHub Releases\]\(https:\/\/github\.com\/Ali-dev11\/devforge\/releases\)/);
-  assert.match(docsPage, /## \[0\.3\.3\] - 2026-03-26/);
+  assert.match(docsPage, /## \[0\.3\.4\] - 2026-03-26/);
   assert.equal(committedDocsPage, docsPage);
 });

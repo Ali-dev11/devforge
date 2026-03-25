@@ -244,6 +244,26 @@ function withSelected<T extends { title: string; value: string }>(
   }));
 }
 
+function getDatabaseChoicesForBackend(
+  backend: BackendConfig,
+): Array<{ title: string; value: BackendConfig["database"] }> {
+  if (backend.orm === "drizzle") {
+    return DATABASE_CHOICES.filter((choice) => choice.value !== "mongodb");
+  }
+
+  return DATABASE_CHOICES;
+}
+
+function getOrmChoicesForBackend(
+  backend: BackendConfig,
+): Array<{ title: string; value: BackendConfig["orm"] }> {
+  if (backend.database === "mongodb") {
+    return ORM_CHOICES.filter((choice) => choice.value !== "drizzle");
+  }
+
+  return ORM_CHOICES;
+}
+
 export function getArchitectureChoicesForIntent(
   intent: ProjectIntent,
 ): Array<{ title: string; value: ArchitectureMode }> {
@@ -608,7 +628,7 @@ export async function collectProjectPlan(
     };
 
     if (backendCoreAnswers.customizeBackend) {
-      const backendAnswers = await prompts(
+      const backendDataAnswers = await prompts(
         [
           {
             type: plan.backend.framework === "nestjs" ? "select" : null,
@@ -625,17 +645,33 @@ export async function collectProjectPlan(
           },
           {
             type: "select",
-            name: "orm",
-            message: "ORM",
-            choices: ORM_CHOICES,
-            initial: getInitialChoiceIndex(ORM_CHOICES, plan.backend?.orm),
-          },
-          {
-            type: "select",
             name: "database",
             message: "Database",
-            choices: DATABASE_CHOICES,
-            initial: getInitialChoiceIndex(DATABASE_CHOICES, plan.backend?.database),
+            choices: getDatabaseChoicesForBackend(plan.backend),
+            initial: getInitialChoiceIndex(
+              getDatabaseChoicesForBackend(plan.backend),
+              plan.backend?.database,
+            ),
+          },
+        ],
+        { onCancel: cancelHandler },
+      );
+
+      const compatibleBackend: BackendConfig = {
+        ...plan.backend,
+        database: backendDataAnswers.database ?? plan.backend.database,
+      };
+      const backendAnswers = await prompts(
+        [
+          {
+            type: "select",
+            name: "orm",
+            message: "ORM / query layer",
+            choices: getOrmChoicesForBackend(compatibleBackend),
+            initial: getInitialChoiceIndex(
+              getOrmChoicesForBackend(compatibleBackend),
+              plan.backend?.orm,
+            ),
           },
           {
             type: "toggle",
@@ -670,11 +706,11 @@ export async function collectProjectPlan(
         language: plan.backend.language,
         adapter:
           plan.backend.framework === "nestjs"
-            ? backendAnswers.adapter ?? plan.backend.adapter ?? "fastify"
+            ? backendDataAnswers.adapter ?? plan.backend.adapter ?? "fastify"
             : undefined,
-        auth: backendAnswers.auth ?? [],
+        auth: backendDataAnswers.auth ?? [],
         orm: backendAnswers.orm ?? "none",
-        database: backendAnswers.database ?? "none",
+        database: backendDataAnswers.database ?? "none",
         redis: Boolean(backendAnswers.redis),
         swagger: Boolean(backendAnswers.swagger),
         websockets: Boolean(backendAnswers.websockets),

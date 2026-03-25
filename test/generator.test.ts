@@ -271,6 +271,29 @@ test("nestjs and javascript backend scaffolds include compatible build settings"
   assert.match(jsPackageJson.scripts.build, /does not require compilation/);
 });
 
+test("lts and latest node strategies do not emit a version-manager file", () => {
+  const ltsPlan = buildDefaultPlan(environment, cliOptions);
+  const latestPlan = buildDefaultPlan(environment, cliOptions);
+  latestPlan.nodeStrategy = "latest";
+
+  const ltsPaths = new Set(buildProjectFiles(ltsPlan, environment).map((file) => file.path));
+  const latestPaths = new Set(buildProjectFiles(latestPlan, environment).map((file) => file.path));
+
+  assert.equal(ltsPaths.has(".nvmrc"), false);
+  assert.equal(latestPaths.has(".nvmrc"), false);
+});
+
+test("custom node strategy emits a version-manager file", () => {
+  const plan = buildDefaultPlan(environment, cliOptions);
+  plan.nodeStrategy = "custom";
+  plan.customNodeVersion = "22.12.0";
+
+  const nvmrcFile = buildProjectFiles(plan, environment).find((file) => file.path === ".nvmrc");
+
+  assert.ok(nvmrcFile);
+  assert.equal(nvmrcFile.content, "22.12.0\n");
+});
+
 test("all intents emit a primary starter surface", () => {
   const expectations: Array<{
     intent: "landing-page" | "frontend-app" | "backend-api" | "fullstack-app" | "microfrontend-system" | "chrome-extension" | "cli-tool";
@@ -319,6 +342,24 @@ test("generateProject rejects file targets that are not directories", async () =
     generateProject(plan, environment),
     /Target path is not a directory/,
   );
+});
+
+test("generateProject reports file write progress", async () => {
+  const plan = buildDefaultPlan(environment, cliOptions);
+  const tempDir = await mkdtemp(join(tmpdir(), "devforge-progress-"));
+  plan.targetDir = join(tempDir, "project");
+
+  const events: Array<{ current: number; total: number }> = [];
+
+  const result = await generateProject(plan, environment, {
+    onWrite(info) {
+      events.push({ current: info.current, total: info.total });
+    },
+  });
+
+  assert.ok(events.length > 0);
+  assert.equal(events.at(-1)?.current, events.at(-1)?.total);
+  assert.equal(events.at(-1)?.current, result.filesWritten.length + 1);
 });
 
 test("writeGeneratedFiles blocks duplicate and escaping output paths", async () => {

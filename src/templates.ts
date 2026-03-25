@@ -77,6 +77,10 @@ function nodeVersionSpec(plan: ProjectPlan): string {
   return "lts/*";
 }
 
+function shouldGenerateNodeVersionFile(plan: ProjectPlan): boolean {
+  return plan.nodeStrategy === "custom" && Boolean(plan.customNodeVersion);
+}
+
 function packageManagerInstallCommand(packageManager: PackageManager): string {
   switch (packageManager) {
     case "pnpm":
@@ -3073,10 +3077,13 @@ function workspaceFiles(
   const files: GeneratedFile[] = [
     workspaceRootPackageJson(plan, tool, packageManagerMetadata),
     makeFile(".gitignore", rootGitignore()),
-    makeFile(".nvmrc", `${nodeVersionSpec(plan)}\n`),
     ...docsFiles(plan),
     ...toolingFiles(plan, { includeTesting: false }),
   ];
+
+  if (shouldGenerateNodeVersionFile(plan)) {
+    files.push(makeFile(".nvmrc", `${nodeVersionSpec(plan)}\n`));
+  }
 
   if (plan.metadata.generateEnvExample) {
     files.push(makeFile(".env.example", envExample(plan)));
@@ -3358,10 +3365,13 @@ function singlePackageFiles(
   const files: GeneratedFile[] = [
     singlePackageJson(plan, packageManagerMetadata),
     makeFile(".gitignore", rootGitignore()),
-    makeFile(".nvmrc", `${nodeVersionSpec(plan)}\n`),
     ...docsFiles(plan),
     ...toolingFiles(plan),
   ];
+
+  if (shouldGenerateNodeVersionFile(plan)) {
+    files.push(makeFile(".nvmrc", `${nodeVersionSpec(plan)}\n`));
+  }
 
   if (plan.metadata.generateEnvExample) {
     files.push(makeFile(".env.example", envExample(plan)));

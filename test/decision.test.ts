@@ -241,3 +241,25 @@ test("custom frontend node versions warn when they fall below scaffold requireme
     /below the recommended minimum for this stack/i,
   );
 });
+
+test("drizzle with mongodb normalizes to a supported backend setup", () => {
+  const plan = buildDefaultPlan(environment, cliOptions);
+  plan.intent = "backend-api";
+  applyIntentDefaults(plan);
+  plan.backend = {
+    framework: "koa",
+    language: "typescript",
+    auth: [],
+    orm: "drizzle",
+    database: "mongodb",
+    redis: false,
+    swagger: true,
+    websockets: false,
+  };
+
+  const result = normalizeProjectPlan(plan, environment);
+
+  assert.equal(result.plan.backend?.database, "mongodb");
+  assert.equal(result.plan.backend?.orm, "none");
+  assert.match(result.warnings.join(" "), /Drizzle ORM does not support MongoDB/i);
+});

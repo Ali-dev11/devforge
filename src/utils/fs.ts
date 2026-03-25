@@ -46,10 +46,15 @@ export async function writeTextFile(path: string, content: string, executable = 
   }
 }
 
-export async function writeGeneratedFiles(rootDir: string, files: GeneratedFile[]): Promise<string[]> {
+export async function writeGeneratedFiles(
+  rootDir: string,
+  files: GeneratedFile[],
+  onWrite?: (info: { current: number; total: number; path: string }) => void,
+): Promise<string[]> {
   const written: string[] = [];
   const seenPaths = new Set<string>();
   const resolvedRoot = resolve(rootDir);
+  const total = files.length;
 
   for (const file of files) {
     const fullPath = resolve(resolvedRoot, file.path);
@@ -65,6 +70,7 @@ export async function writeGeneratedFiles(rootDir: string, files: GeneratedFile[
     seenPaths.add(fullPath);
     await writeTextFile(fullPath, file.content, file.executable);
     written.push(fullPath);
+    onWrite?.({ current: written.length, total, path: fullPath });
   }
 
   return written;

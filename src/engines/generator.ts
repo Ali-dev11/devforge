@@ -15,9 +15,14 @@ import {
   writeJson,
 } from "../utils/fs.js";
 
+type GenerateProjectOptions = {
+  onWrite?: (info: { current: number; total: number; path: string }) => void;
+};
+
 export async function generateProject(
   plan: ProjectPlan,
   environment: EnvironmentInfo,
+  options?: GenerateProjectOptions,
 ): Promise<GeneratedProjectResult> {
   const projectExists = await pathExists(plan.targetDir);
 
@@ -36,9 +41,19 @@ export async function generateProject(
   await ensureDir(plan.targetDir);
 
   const files = [...buildProjectFiles(plan, environment), ...buildAiRuleFiles(plan)];
-  const filesWritten = await writeGeneratedFiles(plan.targetDir, files);
+  const totalWrites = files.length + 1;
+  const filesWritten = await writeGeneratedFiles(plan.targetDir, files, options?.onWrite
+    ? ({ current, path }) => {
+        options.onWrite?.({ current, total: totalWrites, path });
+      }
+    : undefined);
 
   await writeJson(join(plan.targetDir, ".devforge", "project-plan.json"), plan);
+  options?.onWrite?.({
+    current: totalWrites,
+    total: totalWrites,
+    path: join(plan.targetDir, ".devforge", "project-plan.json"),
+  });
 
   return {
     targetDir: plan.targetDir,

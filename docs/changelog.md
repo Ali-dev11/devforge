@@ -9,6 +9,20 @@ Track what changed in DevForge CLI across releases, including scaffolding behavi
 - [GitHub Releases](https://github.com/Ali-dev11/devforge/releases)
 - [Repository Changelog](https://github.com/Ali-dev11/devforge/blob/main/CHANGELOG.md)
 
+## [0.3.4] - 2026-03-26
+
+### Changed
+
+- Improved architecture labels so backend and other non-frontend flows explain what `simple`, `modular`, and `monorepo` mean more clearly during prompting.
+- Added a real-time file generation progress bar during scaffold creation so the CLI shows visible progress after printing the target directory.
+
+### Fixed
+
+- Prevented incompatible backend selections by filtering out `Drizzle` when `MongoDB` is chosen and by normalizing any `Drizzle + MongoDB` plan back to a supported setup.
+- Stopped generating `.nvmrc` for `LTS` and `Latest` Node strategies, avoiding broken version-manager lookups like `lts-latest` on systems that cannot resolve that alias.
+- Hardened dependency installation for `yarn` and `pnpm` by using Corepack when available and by keeping package-manager caches local to the generated project.
+- Removed stale lockfiles from other package managers before installation so the selected package manager stays authoritative after retries or partial runs.
+
 ## [0.3.3] - 2026-03-26
 
 ### Added

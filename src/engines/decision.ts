@@ -166,6 +166,11 @@ export function normalizeProjectPlan(
       warnings.push("ORM selected without a database; defaulting to PostgreSQL.");
       plan.backend.database = "postgresql";
     }
+
+    if (plan.backend.orm === "drizzle" && plan.backend.database === "mongodb") {
+      warnings.push("Drizzle ORM does not support MongoDB in generated backends; switching ORM to none and keeping MongoDB.");
+      plan.backend.orm = "none";
+    }
   }
 
   if (plan.ai.tools.length === 0) {

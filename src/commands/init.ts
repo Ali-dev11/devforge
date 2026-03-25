@@ -13,7 +13,14 @@ import {
   removeFile,
   saveResumeState,
 } from "../utils/fs.js";
-import { banner, info, step, success, warn } from "../utils/logger.js";
+import {
+  banner,
+  createProgressReporter,
+  info,
+  step,
+  success,
+  warn,
+} from "../utils/logger.js";
 
 async function loadResumePlan(): Promise<ResumeState | undefined> {
   const resumePath = join(process.cwd(), RESUME_STATE_PATH);
@@ -64,7 +71,12 @@ export async function runInitCommand(options: CliOptions): Promise<void> {
   }
 
   step(`Generating project in ${plan.targetDir}`);
-  const generated = await generateProject(plan, environment);
+  const progressReporter = createProgressReporter("Writing files");
+  const generated = await generateProject(plan, environment, {
+    onWrite: ({ current, total }) => {
+      progressReporter({ current, total });
+    },
+  });
 
   const installResult = runInstallers(plan, environment, options.skipInstall);
 
