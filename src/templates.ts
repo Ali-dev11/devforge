@@ -9,6 +9,11 @@ import type {
   ProjectPlan,
 } from "./types.js";
 import { joinSentence, toConstantCase, toTitleCase } from "./utils/strings.js";
+import {
+  DEVFORGE_AUTHOR,
+  DEVFORGE_PACKAGE_NAME,
+  DEVFORGE_VERSION,
+} from "./version.js";
 
 type PackageJsonShape = {
   name: string;
@@ -21,6 +26,18 @@ type PackageJsonShape = {
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
   engines?: Record<string, string>;
+};
+
+type ProjectDetailEntry = {
+  label: string;
+  value: string;
+};
+
+type FrontendSurfaceContext = {
+  badge?: string;
+  heading?: string;
+  lead?: string;
+  extraDetails?: ProjectDetailEntry[];
 };
 
 function stringifyJson(data: unknown): string {
@@ -170,6 +187,104 @@ function localTsConfig(include: string[] = ["src", "app", "tests", "cypress"]): 
 
 function generatedProjectVersion(): string {
   return "0.1.0";
+}
+
+function generatedWithText(): string {
+  return `Created by ${DEVFORGE_AUTHOR} via ${DEVFORGE_PACKAGE_NAME} v${DEVFORGE_VERSION}`;
+}
+
+function projectDetailsEntries(
+  plan: ProjectPlan,
+  extraDetails: ProjectDetailEntry[] = [],
+): ProjectDetailEntry[] {
+  return [
+    { label: "Intent", value: toTitleCase(plan.intent) },
+    { label: "Architecture", value: toTitleCase(plan.architecture) },
+    { label: "Template tier", value: toTitleCase(plan.templateTier) },
+    { label: "Package manager", value: plan.packageManager },
+    plan.frontend ? { label: "Frontend", value: toTitleCase(plan.frontend.framework) } : undefined,
+    plan.frontend ? { label: "Rendering", value: toTitleCase(plan.frontend.rendering) } : undefined,
+    plan.frontend ? { label: "State", value: toTitleCase(plan.frontend.state) } : undefined,
+    plan.frontend
+      ? { label: "Data layer", value: toTitleCase(plan.frontend.dataFetching) }
+      : undefined,
+    plan.backend ? { label: "Backend", value: toTitleCase(plan.backend.framework) } : undefined,
+    plan.backend ? { label: "Language", value: toTitleCase(plan.backend.language) } : undefined,
+    plan.extension
+      ? { label: "Extension", value: toTitleCase(plan.extension.flavor) }
+      : undefined,
+    {
+      label: "Testing",
+      value: plan.testing.enabled
+        ? `${toTitleCase(plan.testing.runner)} (${toTitleCase(plan.testing.environment)})`
+        : "Not configured",
+    },
+    ...extraDetails,
+    { label: "Created by", value: DEVFORGE_AUTHOR },
+    { label: "Package", value: DEVFORGE_PACKAGE_NAME },
+  ].filter(Boolean) as ProjectDetailEntry[];
+}
+
+function projectMetadataPayload(
+  plan: ProjectPlan,
+  extra: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    project: {
+      name: plan.projectName,
+      description: plan.metadata.description,
+      intent: plan.intent,
+      architecture: plan.architecture,
+      templateTier: plan.templateTier,
+      license: plan.metadata.license,
+      packageManager: plan.packageManager,
+      nodeStrategy: plan.nodeStrategy,
+      customNodeVersion: plan.customNodeVersion,
+    },
+    stack: {
+      frontend: plan.frontend?.framework,
+      rendering: plan.frontend?.rendering,
+      styling: plan.frontend?.styling,
+      state: plan.frontend?.state,
+      dataFetching: plan.frontend?.dataFetching,
+      backend: plan.backend?.framework,
+      backendLanguage: plan.backend?.language,
+      extension: plan.extension?.flavor,
+      workspaceTool: plan.workspace.tool,
+      microfrontendStrategy: plan.workspace.microfrontendStrategy,
+      remoteApps: plan.workspace.remoteApps,
+    },
+    testing: plan.testing.enabled
+      ? {
+          enabled: true,
+          runner: plan.testing.runner,
+          environment: plan.testing.environment,
+        }
+      : { enabled: false },
+    generatedBy: {
+      githubUser: DEVFORGE_AUTHOR,
+      packageName: DEVFORGE_PACKAGE_NAME,
+      cliVersion: DEVFORGE_VERSION,
+    },
+    ...extra,
+  };
+}
+
+function frontendSurfaceDetails(
+  plan: ProjectPlan,
+  context?: FrontendSurfaceContext,
+): {
+  badge: string;
+  heading: string;
+  lead: string;
+  entries: ProjectDetailEntry[];
+} {
+  return {
+    badge: context?.badge ?? "Project details",
+    heading: context?.heading ?? toTitleCase(plan.projectName),
+    lead: context?.lead ?? plan.metadata.description,
+    entries: projectDetailsEntries(plan, context?.extraDetails ?? []),
+  };
 }
 
 function resolvePackageManagerMetadata(
@@ -1192,10 +1307,11 @@ function styleFileContent(plan: ProjectPlan): string {
   ].join("\n");
 }
 
-function reactAppSource(plan: ProjectPlan): GeneratedFile[] {
+function reactAppSource(plan: ProjectPlan, context?: FrontendSurfaceContext): GeneratedFile[] {
   const frontend = plan.frontend;
   const styleImport =
     frontend?.styling === "scss" ? "./styles.scss" : "./styles.css";
+  const surface = frontendSurfaceDetails(plan, context);
 
   const files: GeneratedFile[] = [
     makeFile(
@@ -1247,14 +1363,29 @@ function reactAppSource(plan: ProjectPlan): GeneratedFile[] {
     makeFile(
       "src/App.tsx",
       [
+        `const badge = ${JSON.stringify(surface.badge)};`,
+        `const heading = ${JSON.stringify(surface.heading)};`,
+        `const lead = ${JSON.stringify(surface.lead)};`,
+        `const details = ${JSON.stringify(surface.entries, null, 2)};`,
+        `const generatedWith = ${JSON.stringify(generatedWithText())};`,
+        "",
         "export default function App() {",
         "  return (",
-        "    <main style={{ padding: \"4rem 1.5rem\", maxWidth: 960, margin: \"0 auto\" }}>",
-        `      <p style={{ letterSpacing: "0.2em", textTransform: "uppercase" }}>DevForge starter</p>`,
-        `      <h1>${toTitleCase(plan.projectName)}</h1>`,
-        "      <p>",
-        `        ${plan.metadata.description}`,
-        "      </p>",
+        "    <main style={{ minHeight: \"100vh\", padding: \"3rem 1.5rem\", background: \"linear-gradient(180deg, #f8f5ef 0%, #efe9dd 100%)\", color: \"#112233\" }}>",
+        "      <section style={{ maxWidth: 960, margin: \"0 auto\", padding: 32, borderRadius: 24, background: \"rgba(255, 252, 247, 0.92)\", border: \"1px solid #e4d8c6\", boxShadow: \"0 24px 80px rgba(17, 34, 51, 0.08)\" }}>",
+        "        <p style={{ letterSpacing: \"0.18em\", textTransform: \"uppercase\", fontSize: 12, fontWeight: 700, color: \"#7d5a32\" }}>{badge}</p>",
+        "        <h1 style={{ margin: \"0.35rem 0 0\", fontSize: \"clamp(2.4rem, 5vw, 4rem)\" }}>{heading}</h1>",
+        "        <p style={{ marginTop: 16, maxWidth: 720, fontSize: 18, lineHeight: 1.7, color: \"#3a4856\" }}>{lead}</p>",
+        "        <dl style={{ marginTop: 28, display: \"grid\", gridTemplateColumns: \"repeat(auto-fit, minmax(220px, 1fr))\", gap: 16 }}>",
+        "          {details.map((detail) => (",
+        "            <div key={detail.label} style={{ margin: 0, padding: 18, borderRadius: 18, border: \"1px solid #eadfcd\", background: \"#fffaf3\" }}>",
+        "              <dt style={{ fontSize: 12, textTransform: \"uppercase\", letterSpacing: \"0.12em\", color: \"#7b6547\" }}>{detail.label}</dt>",
+        "              <dd style={{ margin: \"0.6rem 0 0\", fontSize: 18, fontWeight: 600, color: \"#15283b\" }}>{detail.value}</dd>",
+        "            </div>",
+        "          ))}",
+        "        </dl>",
+        "        <p style={{ marginTop: 24, fontSize: 14, color: \"#6d5a45\" }}>{generatedWith}</p>",
+        "      </section>",
         "    </main>",
         "  );",
         "}",
@@ -1299,7 +1430,8 @@ function reactAppSource(plan: ProjectPlan): GeneratedFile[] {
   return files;
 }
 
-function nextJsSource(plan: ProjectPlan): GeneratedFile[] {
+function nextJsSource(plan: ProjectPlan, context?: FrontendSurfaceContext): GeneratedFile[] {
+  const surface = frontendSurfaceDetails(plan, context);
   return [
     makeFile(
       "next.config.ts",
@@ -1336,12 +1468,26 @@ function nextJsSource(plan: ProjectPlan): GeneratedFile[] {
     makeFile(
       "app/page.tsx",
       [
+        `const details = ${JSON.stringify(surface.entries, null, 2)};`,
+        `const generatedWith = ${JSON.stringify(generatedWithText())};`,
+        "",
         "export default function HomePage() {",
         "  return (",
-        "    <main style={{ padding: \"4rem 1.5rem\", maxWidth: 960, margin: \"0 auto\" }}>",
-        `      <p style={{ textTransform: "uppercase", letterSpacing: "0.2em" }}>DevForge generated</p>`,
-        `      <h1>${toTitleCase(plan.projectName)}</h1>`,
-        `      <p>${plan.metadata.description}</p>`,
+        "    <main style={{ minHeight: \"100vh\", padding: \"3rem 1.5rem\", background: \"linear-gradient(180deg, #f8f5ef 0%, #efe9dd 100%)\", color: \"#112233\" }}>",
+        "      <section style={{ maxWidth: 960, margin: \"0 auto\", padding: 32, borderRadius: 24, background: \"rgba(255, 252, 247, 0.92)\", border: \"1px solid #e4d8c6\" }}>",
+        `        <p style={{ textTransform: "uppercase", letterSpacing: "0.18em", fontSize: 12, color: "#7d5a32" }}>${surface.badge}</p>`,
+        `        <h1 style={{ marginTop: 8, fontSize: "clamp(2.4rem, 5vw, 4rem)" }}>${surface.heading}</h1>`,
+        `        <p style={{ marginTop: 16, maxWidth: 720, fontSize: 18, lineHeight: 1.7, color: "#3a4856" }}>${surface.lead}</p>`,
+        "        <dl style={{ marginTop: 28, display: \"grid\", gridTemplateColumns: \"repeat(auto-fit, minmax(220px, 1fr))\", gap: 16 }}>",
+        "          {details.map((detail) => (",
+        "            <div key={detail.label} style={{ padding: 18, borderRadius: 18, border: \"1px solid #eadfcd\", background: \"#fffaf3\" }}>",
+        "              <dt style={{ fontSize: 12, textTransform: \"uppercase\", letterSpacing: \"0.12em\", color: \"#7b6547\" }}>{detail.label}</dt>",
+        "              <dd style={{ margin: \"0.6rem 0 0\", fontSize: 18, fontWeight: 600, color: \"#15283b\" }}>{detail.value}</dd>",
+        "            </div>",
+        "          ))}",
+        "        </dl>",
+        "        <p style={{ marginTop: 24, fontSize: 14, color: \"#6d5a45\" }}>{generatedWith}</p>",
+        "      </section>",
         "    </main>",
         "  );",
         "}",
@@ -1352,7 +1498,8 @@ function nextJsSource(plan: ProjectPlan): GeneratedFile[] {
   ];
 }
 
-function astroSource(plan: ProjectPlan): GeneratedFile[] {
+function astroSource(plan: ProjectPlan, context?: FrontendSurfaceContext): GeneratedFile[] {
+  const surface = frontendSurfaceDetails(plan, context);
   return [
     makeFile(
       "astro.config.mjs",
@@ -1367,7 +1514,11 @@ function astroSource(plan: ProjectPlan): GeneratedFile[] {
       "src/pages/index.astro",
       [
         "---",
-        `const title = "${toTitleCase(plan.projectName)}";`,
+        `const title = ${JSON.stringify(surface.heading)};`,
+        `const badge = ${JSON.stringify(surface.badge)};`,
+        `const lead = ${JSON.stringify(surface.lead)};`,
+        `const details = ${JSON.stringify(surface.entries, null, 2)};`,
+        `const generatedWith = ${JSON.stringify(generatedWithText())};`,
         "---",
         "",
         "<html lang=\"en\">",
@@ -1375,9 +1526,36 @@ function astroSource(plan: ProjectPlan): GeneratedFile[] {
         "    <meta charset=\"utf-8\" />",
         "    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />",
         "    <title>{title}</title>",
+        "    <style>",
+        "      body { margin: 0; font-family: Georgia, serif; background: linear-gradient(180deg, #f8f5ef 0%, #efe9dd 100%); color: #112233; }",
+        "      .shell { max-width: 960px; margin: 0 auto; padding: 3rem 1.5rem; }",
+        "      .panel { padding: 2rem; border-radius: 24px; background: rgba(255, 252, 247, 0.92); border: 1px solid #e4d8c6; }",
+        "      .eyebrow { text-transform: uppercase; letter-spacing: 0.18em; font-size: 12px; color: #7d5a32; }",
+        "      .lede { max-width: 720px; font-size: 18px; line-height: 1.7; color: #3a4856; }",
+        "      .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-top: 28px; }",
+        "      .card { padding: 18px; border-radius: 18px; border: 1px solid #eadfcd; background: #fffaf3; }",
+        "      dt { font-size: 12px; text-transform: uppercase; letter-spacing: 0.12em; color: #7b6547; }",
+        "      dd { margin: 0.6rem 0 0; font-size: 18px; font-weight: 600; color: #15283b; }",
+        "      .signature { margin-top: 24px; font-size: 14px; color: #6d5a45; }",
+        "    </style>",
         "  </head>",
         "  <body>",
-        `    <main><h1>{title}</h1><p>${plan.metadata.description}</p></main>`,
+        "    <main class=\"shell\">",
+        "      <section class=\"panel\">",
+        "        <p class=\"eyebrow\">{badge}</p>",
+        "        <h1>{title}</h1>",
+        "        <p class=\"lede\">{lead}</p>",
+        "        <dl class=\"grid\">",
+        "          {details.map((detail) => (",
+        "            <div class=\"card\">",
+        "              <dt>{detail.label}</dt>",
+        "              <dd>{detail.value}</dd>",
+        "            </div>",
+        "          ))}",
+        "        </dl>",
+        "        <p class=\"signature\">{generatedWith}</p>",
+        "      </section>",
+        "    </main>",
         "  </body>",
         "</html>",
         "",
@@ -1386,7 +1564,8 @@ function astroSource(plan: ProjectPlan): GeneratedFile[] {
   ];
 }
 
-function vueSource(plan: ProjectPlan): GeneratedFile[] {
+function vueSource(plan: ProjectPlan, context?: FrontendSurfaceContext): GeneratedFile[] {
+  const surface = frontendSurfaceDetails(plan, context);
   return [
     makeFile(
       "index.html",
@@ -1433,13 +1612,35 @@ function vueSource(plan: ProjectPlan): GeneratedFile[] {
       [
         "<template>",
         "  <main class=\"shell\">",
-        `    <h1>${toTitleCase(plan.projectName)}</h1>`,
-        `    <p>${plan.metadata.description}</p>`,
+        "    <section class=\"panel\">",
+        `      <p class="eyebrow">${surface.badge}</p>`,
+        `      <h1>${surface.heading}</h1>`,
+        `      <p class="lede">${surface.lead}</p>`,
+        "      <dl class=\"grid\">",
+        "        <div v-for=\"detail in details\" :key=\"detail.label\" class=\"card\">",
+        "          <dt>{{ detail.label }}</dt>",
+        "          <dd>{{ detail.value }}</dd>",
+        "        </div>",
+        "      </dl>",
+        `      <p class="signature">${generatedWithText()}</p>`,
+        "    </section>",
         "  </main>",
         "</template>",
         "",
+        "<script setup lang=\"ts\">",
+        `const details = ${JSON.stringify(surface.entries, null, 2)};`,
+        "</script>",
+        "",
         "<style scoped>",
-        ".shell { padding: 4rem 1.5rem; max-width: 960px; margin: 0 auto; }",
+        ".shell { min-height: 100vh; padding: 3rem 1.5rem; background: linear-gradient(180deg, #f8f5ef 0%, #efe9dd 100%); color: #112233; }",
+        ".panel { max-width: 960px; margin: 0 auto; padding: 2rem; border-radius: 24px; background: rgba(255, 252, 247, 0.92); border: 1px solid #e4d8c6; }",
+        ".eyebrow { text-transform: uppercase; letter-spacing: 0.18em; font-size: 12px; color: #7d5a32; }",
+        ".lede { max-width: 720px; font-size: 18px; line-height: 1.7; color: #3a4856; }",
+        ".grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-top: 28px; }",
+        ".card { padding: 18px; border-radius: 18px; border: 1px solid #eadfcd; background: #fffaf3; }",
+        "dt { font-size: 12px; text-transform: uppercase; letter-spacing: 0.12em; color: #7b6547; }",
+        "dd { margin: 0.6rem 0 0; font-size: 18px; font-weight: 600; color: #15283b; }",
+        ".signature { margin-top: 24px; font-size: 14px; color: #6d5a45; }",
         "</style>",
         "",
       ].join("\n"),
@@ -1447,7 +1648,8 @@ function vueSource(plan: ProjectPlan): GeneratedFile[] {
   ];
 }
 
-function nuxtSource(plan: ProjectPlan): GeneratedFile[] {
+function nuxtSource(plan: ProjectPlan, context?: FrontendSurfaceContext): GeneratedFile[] {
+  const surface = frontendSurfaceDetails(plan, context);
   return [
     makeFile(
       "nuxt.config.ts",
@@ -1462,18 +1664,45 @@ function nuxtSource(plan: ProjectPlan): GeneratedFile[] {
       "app.vue",
       [
         "<template>",
-        "  <main style=\"padding: 4rem 1.5rem; max-width: 960px; margin: 0 auto;\">",
-        `    <h1>${toTitleCase(plan.projectName)}</h1>`,
-        `    <p>${plan.metadata.description}</p>`,
+        "  <main class=\"shell\">",
+        "    <section class=\"panel\">",
+        `      <p class="eyebrow">${surface.badge}</p>`,
+        `      <h1>${surface.heading}</h1>`,
+        `      <p class="lede">${surface.lead}</p>`,
+        "      <dl class=\"grid\">",
+        "        <div v-for=\"detail in details\" :key=\"detail.label\" class=\"card\">",
+        "          <dt>{{ detail.label }}</dt>",
+        "          <dd>{{ detail.value }}</dd>",
+        "        </div>",
+        "      </dl>",
+        `      <p class="signature">${generatedWithText()}</p>`,
+        "    </section>",
         "  </main>",
         "</template>",
+        "",
+        "<script setup lang=\"ts\">",
+        `const details = ${JSON.stringify(surface.entries, null, 2)};`,
+        "</script>",
+        "",
+        "<style scoped>",
+        ".shell { min-height: 100vh; padding: 3rem 1.5rem; background: linear-gradient(180deg, #f8f5ef 0%, #efe9dd 100%); color: #112233; }",
+        ".panel { max-width: 960px; margin: 0 auto; padding: 2rem; border-radius: 24px; background: rgba(255, 252, 247, 0.92); border: 1px solid #e4d8c6; }",
+        ".eyebrow { text-transform: uppercase; letter-spacing: 0.18em; font-size: 12px; color: #7d5a32; }",
+        ".lede { max-width: 720px; font-size: 18px; line-height: 1.7; color: #3a4856; }",
+        ".grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-top: 28px; }",
+        ".card { padding: 18px; border-radius: 18px; border: 1px solid #eadfcd; background: #fffaf3; }",
+        "dt { font-size: 12px; text-transform: uppercase; letter-spacing: 0.12em; color: #7b6547; }",
+        "dd { margin: 0.6rem 0 0; font-size: 18px; font-weight: 600; color: #15283b; }",
+        ".signature { margin-top: 24px; font-size: 14px; color: #6d5a45; }",
+        "</style>",
         "",
       ].join("\n"),
     ),
   ];
 }
 
-function svelteSource(plan: ProjectPlan): GeneratedFile[] {
+function svelteSource(plan: ProjectPlan, context?: FrontendSurfaceContext): GeneratedFile[] {
+  const surface = frontendSurfaceDetails(plan, context);
   return [
     makeFile(
       "index.html",
@@ -1522,14 +1751,26 @@ function svelteSource(plan: ProjectPlan): GeneratedFile[] {
       "src/App.svelte",
       [
         "<script lang=\"ts\">",
-        `  const description = "${plan.metadata.description}";`,
+        `  const details = ${JSON.stringify(surface.entries, null, 2)};`,
         "</script>",
         "",
-        `<svelte:head><title>${toTitleCase(plan.projectName)}</title></svelte:head>`,
+        `<svelte:head><title>${surface.heading}</title></svelte:head>`,
         "",
-        `<main style="padding: 4rem 1.5rem; max-width: 960px; margin: 0 auto;">`,
-        `  <h1>${toTitleCase(plan.projectName)}</h1>`,
-        "  <p>{description}</p>",
+        `<main style="min-height: 100vh; padding: 3rem 1.5rem; background: linear-gradient(180deg, #f8f5ef 0%, #efe9dd 100%); color: #112233;">`,
+        `  <section style="max-width: 960px; margin: 0 auto; padding: 2rem; border-radius: 24px; background: rgba(255, 252, 247, 0.92); border: 1px solid #e4d8c6;">`,
+        `    <p style="text-transform: uppercase; letter-spacing: 0.18em; font-size: 12px; color: #7d5a32;">${surface.badge}</p>`,
+        `    <h1 style="margin-top: 0.35rem; font-size: clamp(2.4rem, 5vw, 4rem);">${surface.heading}</h1>`,
+        `    <p style="max-width: 720px; font-size: 18px; line-height: 1.7; color: #3a4856;">${surface.lead}</p>`,
+        "    <dl style=\"display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-top: 28px;\">",
+        "      {#each details as detail}",
+        "        <div style=\"padding: 18px; border-radius: 18px; border: 1px solid #eadfcd; background: #fffaf3;\">",
+        "          <dt style=\"font-size: 12px; text-transform: uppercase; letter-spacing: 0.12em; color: #7b6547;\">{detail.label}</dt>",
+        "          <dd style=\"margin: 0.6rem 0 0; font-size: 18px; font-weight: 600; color: #15283b;\">{detail.value}</dd>",
+        "        </div>",
+        "      {/each}",
+        "    </dl>",
+        `    <p style="margin-top: 24px; font-size: 14px; color: #6d5a45;">${generatedWithText()}</p>`,
+        "  </section>",
         "</main>",
         "",
       ].join("\n"),
@@ -1537,7 +1778,8 @@ function svelteSource(plan: ProjectPlan): GeneratedFile[] {
   ];
 }
 
-function svelteKitSource(plan: ProjectPlan): GeneratedFile[] {
+function svelteKitSource(plan: ProjectPlan, context?: FrontendSurfaceContext): GeneratedFile[] {
+  const surface = frontendSurfaceDetails(plan, context);
   return [
     makeFile(
       "svelte.config.js",
@@ -1551,11 +1793,27 @@ function svelteKitSource(plan: ProjectPlan): GeneratedFile[] {
     makeFile(
       "src/routes/+page.svelte",
       [
-        `<svelte:head><title>${toTitleCase(plan.projectName)}</title></svelte:head>`,
+        "<script lang=\"ts\">",
+        `  const details = ${JSON.stringify(surface.entries, null, 2)};`,
+        "</script>",
         "",
-        `<main style="padding: 4rem 1.5rem; max-width: 960px; margin: 0 auto;">`,
-        `  <h1>${toTitleCase(plan.projectName)}</h1>`,
-        `  <p>${plan.metadata.description}</p>`,
+        `<svelte:head><title>${surface.heading}</title></svelte:head>`,
+        "",
+        `<main style="min-height: 100vh; padding: 3rem 1.5rem; background: linear-gradient(180deg, #f8f5ef 0%, #efe9dd 100%); color: #112233;">`,
+        `  <section style="max-width: 960px; margin: 0 auto; padding: 2rem; border-radius: 24px; background: rgba(255, 252, 247, 0.92); border: 1px solid #e4d8c6;">`,
+        `    <p style="text-transform: uppercase; letter-spacing: 0.18em; font-size: 12px; color: #7d5a32;">${surface.badge}</p>`,
+        `    <h1 style="margin-top: 0.35rem; font-size: clamp(2.4rem, 5vw, 4rem);">${surface.heading}</h1>`,
+        `    <p style="max-width: 720px; font-size: 18px; line-height: 1.7; color: #3a4856;">${surface.lead}</p>`,
+        "    <dl style=\"display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-top: 28px;\">",
+        "      {#each details as detail}",
+        "        <div style=\"padding: 18px; border-radius: 18px; border: 1px solid #eadfcd; background: #fffaf3;\">",
+        "          <dt style=\"font-size: 12px; text-transform: uppercase; letter-spacing: 0.12em; color: #7b6547;\">{detail.label}</dt>",
+        "          <dd style=\"margin: 0.6rem 0 0; font-size: 18px; font-weight: 600; color: #15283b;\">{detail.value}</dd>",
+        "        </div>",
+        "      {/each}",
+        "    </dl>",
+        `    <p style="margin-top: 24px; font-size: 14px; color: #6d5a45;">${generatedWithText()}</p>`,
+        "  </section>",
         "</main>",
         "",
       ].join("\n"),
@@ -1563,7 +1821,8 @@ function svelteKitSource(plan: ProjectPlan): GeneratedFile[] {
   ];
 }
 
-function solidSource(plan: ProjectPlan): GeneratedFile[] {
+function solidSource(plan: ProjectPlan, context?: FrontendSurfaceContext): GeneratedFile[] {
+  const surface = frontendSurfaceDetails(plan, context);
   return [
     makeFile(
       "index.html",
@@ -1608,11 +1867,26 @@ function solidSource(plan: ProjectPlan): GeneratedFile[] {
     makeFile(
       "src/App.tsx",
       [
+        `const details = ${JSON.stringify(surface.entries, null, 2)};`,
+        `const generatedWith = ${JSON.stringify(generatedWithText())};`,
+        "",
         "export default function App() {",
         "  return (",
-        "    <main style={{ padding: \"4rem 1.5rem\", maxWidth: \"960px\", margin: \"0 auto\" }}>",
-        `      <h1>${toTitleCase(plan.projectName)}</h1>`,
-        `      <p>${plan.metadata.description}</p>`,
+        "    <main style={{ minHeight: \"100vh\", padding: \"3rem 1.5rem\", background: \"linear-gradient(180deg, #f8f5ef 0%, #efe9dd 100%)\", color: \"#112233\" }}>",
+        "      <section style={{ maxWidth: \"960px\", margin: \"0 auto\", padding: \"2rem\", borderRadius: \"24px\", background: \"rgba(255, 252, 247, 0.92)\", border: \"1px solid #e4d8c6\" }}>",
+        `        <p style={{ textTransform: "uppercase", letterSpacing: "0.18em", fontSize: "12px", color: "#7d5a32" }}>${surface.badge}</p>`,
+        `        <h1 style={{ marginTop: "0.35rem", fontSize: "clamp(2.4rem, 5vw, 4rem)" }}>${surface.heading}</h1>`,
+        `        <p style={{ maxWidth: "720px", fontSize: "18px", lineHeight: 1.7, color: "#3a4856" }}>${surface.lead}</p>`,
+        "        <dl style={{ display: \"grid\", gridTemplateColumns: \"repeat(auto-fit, minmax(220px, 1fr))\", gap: \"16px\", marginTop: \"28px\" }}>",
+        "          {details.map((detail) => (",
+        "            <div style={{ padding: \"18px\", borderRadius: \"18px\", border: \"1px solid #eadfcd\", background: \"#fffaf3\" }}>",
+        "              <dt style={{ fontSize: \"12px\", textTransform: \"uppercase\", letterSpacing: \"0.12em\", color: \"#7b6547\" }}>{detail.label}</dt>",
+        "              <dd style={{ margin: \"0.6rem 0 0\", fontSize: \"18px\", fontWeight: 600, color: \"#15283b\" }}>{detail.value}</dd>",
+        "            </div>",
+        "          ))}",
+        "        </dl>",
+        "        <p style={{ marginTop: \"24px\", fontSize: \"14px\", color: \"#6d5a45\" }}>{generatedWith}</p>",
+        "      </section>",
         "    </main>",
         "  );",
         "}",
@@ -1622,7 +1896,8 @@ function solidSource(plan: ProjectPlan): GeneratedFile[] {
   ];
 }
 
-function angularSource(plan: ProjectPlan): GeneratedFile[] {
+function angularSource(plan: ProjectPlan, context?: FrontendSurfaceContext): GeneratedFile[] {
+  const surface = frontendSurfaceDetails(plan, context);
   return [
     makeFile(
       "src/main.ts",
@@ -1630,12 +1905,31 @@ function angularSource(plan: ProjectPlan): GeneratedFile[] {
         "import { bootstrapApplication } from \"@angular/platform-browser\";",
         "import { Component } from \"@angular/core\";",
         "",
+        `const details = ${JSON.stringify(surface.entries, null, 2)};`,
+        "",
         "@Component({",
         "  selector: \"app-root\",",
         "  standalone: true,",
-        `  template: \`<main style="padding:4rem 1.5rem;max-width:960px;margin:0 auto"><h1>${toTitleCase(plan.projectName)}</h1><p>${plan.metadata.description}</p></main>\`,`,
+        `  template: \`
+    <main style="min-height:100vh;padding:3rem 1.5rem;background:linear-gradient(180deg,#f8f5ef 0%,#efe9dd 100%);color:#112233">
+      <section style="max-width:960px;margin:0 auto;padding:2rem;border-radius:24px;background:rgba(255,252,247,0.92);border:1px solid #e4d8c6">
+        <p style="text-transform:uppercase;letter-spacing:0.18em;font-size:12px;color:#7d5a32">${surface.badge}</p>
+        <h1 style="margin-top:0.35rem;font-size:clamp(2.4rem,5vw,4rem)">${surface.heading}</h1>
+        <p style="max-width:720px;font-size:18px;line-height:1.7;color:#3a4856">${surface.lead}</p>
+        <dl style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-top:28px">
+          <div *ngFor="let detail of details" style="padding:18px;border-radius:18px;border:1px solid #eadfcd;background:#fffaf3">
+            <dt style="font-size:12px;text-transform:uppercase;letter-spacing:0.12em;color:#7b6547">{{ detail.label }}</dt>
+            <dd style="margin:0.6rem 0 0;font-size:18px;font-weight:600;color:#15283b">{{ detail.value }}</dd>
+          </div>
+        </dl>
+        <p style="margin-top:24px;font-size:14px;color:#6d5a45">${generatedWithText()}</p>
+      </section>
+    </main>\`,`,
+        "  styles: [],",
         "})",
-        "class AppComponent {}",
+        "class AppComponent {",
+        "  details = details;",
+        "}",
         "",
         "bootstrapApplication(AppComponent);",
         "",
@@ -1653,7 +1947,8 @@ function angularSource(plan: ProjectPlan): GeneratedFile[] {
   ];
 }
 
-function remixSource(plan: ProjectPlan): GeneratedFile[] {
+function remixSource(plan: ProjectPlan, context?: FrontendSurfaceContext): GeneratedFile[] {
+  const surface = frontendSurfaceDetails(plan, context);
   return [
     makeFile(
       "app/root.tsx",
@@ -1681,11 +1976,26 @@ function remixSource(plan: ProjectPlan): GeneratedFile[] {
     makeFile(
       "app/routes/_index.tsx",
       [
+        `const details = ${JSON.stringify(surface.entries, null, 2)};`,
+        `const generatedWith = ${JSON.stringify(generatedWithText())};`,
+        "",
         "export default function IndexRoute() {",
         "  return (",
-        "    <main style={{ padding: \"4rem 1.5rem\", maxWidth: 960, margin: \"0 auto\" }}>",
-        `      <h1>${toTitleCase(plan.projectName)}</h1>`,
-        `      <p>${plan.metadata.description}</p>`,
+        "    <main style={{ minHeight: \"100vh\", padding: \"3rem 1.5rem\", background: \"linear-gradient(180deg, #f8f5ef 0%, #efe9dd 100%)\", color: \"#112233\" }}>",
+        "      <section style={{ maxWidth: 960, margin: \"0 auto\", padding: 32, borderRadius: 24, background: \"rgba(255, 252, 247, 0.92)\", border: \"1px solid #e4d8c6\" }}>",
+        `        <p style={{ textTransform: "uppercase", letterSpacing: "0.18em", fontSize: 12, color: "#7d5a32" }}>${surface.badge}</p>`,
+        `        <h1 style={{ marginTop: 8, fontSize: "clamp(2.4rem, 5vw, 4rem)" }}>${surface.heading}</h1>`,
+        `        <p style={{ marginTop: 16, maxWidth: 720, fontSize: 18, lineHeight: 1.7, color: "#3a4856" }}>${surface.lead}</p>`,
+        "        <dl style={{ marginTop: 28, display: \"grid\", gridTemplateColumns: \"repeat(auto-fit, minmax(220px, 1fr))\", gap: 16 }}>",
+        "          {details.map((detail) => (",
+        "            <div key={detail.label} style={{ padding: 18, borderRadius: 18, border: \"1px solid #eadfcd\", background: \"#fffaf3\" }}>",
+        "              <dt style={{ fontSize: 12, textTransform: \"uppercase\", letterSpacing: \"0.12em\", color: \"#7b6547\" }}>{detail.label}</dt>",
+        "              <dd style={{ margin: \"0.6rem 0 0\", fontSize: 18, fontWeight: 600, color: \"#15283b\" }}>{detail.value}</dd>",
+        "            </div>",
+        "          ))}",
+        "        </dl>",
+        "        <p style={{ marginTop: 24, fontSize: 14, color: \"#6d5a45\" }}>{generatedWith}</p>",
+        "      </section>",
         "    </main>",
         "  );",
         "}",
@@ -1695,34 +2005,45 @@ function remixSource(plan: ProjectPlan): GeneratedFile[] {
   ];
 }
 
-function frontendFiles(plan: ProjectPlan): GeneratedFile[] {
+function frontendFiles(plan: ProjectPlan, context?: FrontendSurfaceContext): GeneratedFile[] {
   switch (plan.frontend?.framework) {
     case "nextjs":
-      return nextJsSource(plan);
+      return nextJsSource(plan, context);
     case "astro":
-      return astroSource(plan);
+      return astroSource(plan, context);
     case "nuxt":
-      return nuxtSource(plan);
+      return nuxtSource(plan, context);
     case "vue-vite":
-      return vueSource(plan);
+      return vueSource(plan, context);
     case "svelte":
-      return svelteSource(plan);
+      return svelteSource(plan, context);
     case "sveltekit":
-      return svelteKitSource(plan);
+      return svelteKitSource(plan, context);
     case "solidjs":
-      return solidSource(plan);
+      return solidSource(plan, context);
     case "angular":
-      return angularSource(plan);
+      return angularSource(plan, context);
     case "remix":
-      return remixSource(plan);
+      return remixSource(plan, context);
     case "react-vite":
     default:
-      return reactAppSource(plan);
+      return reactAppSource(plan, context);
   }
 }
 
 function backendServerSource(plan: ProjectPlan): string {
   const framework = plan.backend?.framework ?? "hono";
+  const projectInfo = JSON.stringify(
+    projectMetadataPayload(plan, {
+      service: "api",
+      endpoints: {
+        self: "/",
+        health: "/health",
+      },
+    }),
+    null,
+    2,
+  );
 
   switch (framework) {
     case "express":
@@ -1730,9 +2051,12 @@ function backendServerSource(plan: ProjectPlan): string {
         "import express from \"express\";",
         "import cors from \"cors\";",
         "",
+        `const projectInfo = ${projectInfo};`,
+        "",
         "const app = express();",
         "app.use(cors());",
-        "app.get(\"/health\", (_req, res) => res.json({ ok: true }));",
+        "app.get(\"/\", (_req, res) => res.json(projectInfo));",
+        "app.get(\"/health\", (_req, res) => res.json({ ok: true, status: \"healthy\", ...projectInfo }));",
         "",
         "const port = Number(process.env.PORT ?? 3001);",
         "app.listen(port, () => {",
@@ -1744,8 +2068,11 @@ function backendServerSource(plan: ProjectPlan): string {
       return [
         "import Fastify from \"fastify\";",
         "",
+        `const projectInfo = ${projectInfo};`,
+        "",
         "const app = Fastify();",
-        "app.get(\"/health\", async () => ({ ok: true }));",
+        "app.get(\"/\", async () => projectInfo);",
+        "app.get(\"/health\", async () => ({ ok: true, status: \"healthy\", ...projectInfo }));",
         "",
         "const port = Number(process.env.PORT ?? 3001);",
         "app.listen({ port });",
@@ -1755,14 +2082,16 @@ function backendServerSource(plan: ProjectPlan): string {
       return [
         "import Koa from \"koa\";",
         "",
+        `const projectInfo = ${projectInfo};`,
+        "",
         "const app = new Koa();",
         "app.use(async (ctx) => {",
         "  if (ctx.path === \"/health\") {",
-        "    ctx.body = { ok: true };",
+        "    ctx.body = { ok: true, status: \"healthy\", ...projectInfo };",
         "    return;",
         "  }",
         "",
-        "  ctx.body = { status: \"ready\" };",
+        "  ctx.body = projectInfo;",
         "});",
         "",
         "const port = Number(process.env.PORT ?? 3001);",
@@ -1774,11 +2103,18 @@ function backendServerSource(plan: ProjectPlan): string {
         "import { NestFactory } from \"@nestjs/core\";",
         "import { Module, Controller, Get } from \"@nestjs/common\";",
         "",
+        `const projectInfo = ${projectInfo};`,
+        "",
         "@Controller()",
         "class AppController {",
+        "  @Get()",
+        "  info() {",
+        "    return projectInfo;",
+        "  }",
+        "",
         "  @Get(\"health\")",
         "  health() {",
-        "    return { ok: true };",
+        "    return { ok: true, status: \"healthy\", ...projectInfo };",
         "  }",
         "}",
         "",
@@ -1799,8 +2135,11 @@ function backendServerSource(plan: ProjectPlan): string {
         "import { Hono } from \"hono\";",
         "import { serve } from \"@hono/node-server\";",
         "",
+        `const projectInfo = ${projectInfo};`,
+        "",
         "const app = new Hono();",
-        "app.get(\"/health\", (c) => c.json({ ok: true }));",
+        "app.get(\"/\", (c) => c.json(projectInfo));",
+        "app.get(\"/health\", (c) => c.json({ ok: true, status: \"healthy\", ...projectInfo }));",
         "",
         "serve({",
         "  fetch: app.fetch,",
@@ -1857,6 +2196,15 @@ function backendFiles(plan: ProjectPlan): GeneratedFile[] {
 }
 
 function cliToolFiles(plan: ProjectPlan): GeneratedFile[] {
+  const projectInfo = JSON.stringify(
+    projectMetadataPayload(plan, {
+      service: "cli",
+      commands: ["info", "--json", "--help"],
+    }),
+    null,
+    2,
+  );
+
   return [
     makeFile(
       "src/index.ts",
@@ -1864,11 +2212,25 @@ function cliToolFiles(plan: ProjectPlan): GeneratedFile[] {
         "#!/usr/bin/env node",
         "",
         "const args = process.argv.slice(2);",
+        `const projectInfo = ${projectInfo};`,
+        "",
+        "function printSummary() {",
+        `  console.log(${JSON.stringify(toTitleCase(plan.projectName) + " CLI scaffold")});`,
+        `  console.log(${JSON.stringify(plan.metadata.description)});`,
+        `  console.log(${JSON.stringify(generatedWithText())});`,
+        "  console.log(\"\");",
+        "  console.log(`Intent: ${projectInfo.project.intent}`);",
+        "  console.log(`Architecture: ${projectInfo.project.architecture}`);",
+        "  console.log(`Package manager: ${projectInfo.project.packageManager}`);",
+        "  console.log(\"Run --json for the full project manifest.\");",
+        "}",
         "",
         "if (args.includes(\"--help\")) {",
-        `  console.log("Usage: ${plan.projectName} [command]");`,
+        `  console.log("Usage: ${plan.projectName} [command]\\n\\nCommands:\\n  info    Print the scaffold summary\\n\\nFlags:\\n  --json  Print full project metadata as JSON\\n  --help  Show this help message");`,
+        "} else if (args.includes(\"--json\") || args[0] === \"info\") {",
+        "  console.log(JSON.stringify(projectInfo, null, 2));",
         "} else {",
-        `  console.log("${toTitleCase(plan.projectName)} is ready.");`,
+        "  printSummary();",
         "}",
         "",
       ].join("\n"),
@@ -1878,6 +2240,18 @@ function cliToolFiles(plan: ProjectPlan): GeneratedFile[] {
 }
 
 function chromeExtensionFiles(plan: ProjectPlan): GeneratedFile[] {
+  const extensionInfo = JSON.stringify(
+    projectMetadataPayload(plan, {
+      service: "chrome-extension",
+      extension: {
+        includesBackground: plan.extension?.includesBackground ?? false,
+        includesContent: plan.extension?.includesContent ?? false,
+        includesPopup: plan.extension?.includesPopup ?? false,
+      },
+    }),
+    null,
+    2,
+  );
   const files: GeneratedFile[] = [
     makeFile(
       "manifest.json",
@@ -1912,8 +2286,10 @@ function chromeExtensionFiles(plan: ProjectPlan): GeneratedFile[] {
       makeFile(
         "src/background.ts",
         [
+          `const extensionInfo = ${extensionInfo};`,
+          "",
           "chrome.runtime.onInstalled.addListener(() => {",
-          "  console.log(\"Extension installed\");",
+          "  console.log(\"Extension installed\", extensionInfo);",
           "});",
           "",
         ].join("\n"),
@@ -1926,7 +2302,9 @@ function chromeExtensionFiles(plan: ProjectPlan): GeneratedFile[] {
       makeFile(
         "src/content.ts",
         [
-          "console.log(\"DevForge content script ready\");",
+          `const extensionInfo = ${extensionInfo};`,
+          "",
+          "console.log(\"DevForge content script ready\", extensionInfo);",
           "",
         ].join("\n"),
       ),
@@ -1943,11 +2321,26 @@ function chromeExtensionFiles(plan: ProjectPlan): GeneratedFile[] {
               "import React from \"react\";",
               "import ReactDOM from \"react-dom/client\";",
               "",
+              `const extensionInfo = ${extensionInfo};`,
+              `const details = ${JSON.stringify(projectDetailsEntries(plan), null, 2)};`,
+              `const generatedWith = ${JSON.stringify(generatedWithText())};`,
+              "",
               "function Popup() {",
               "  return (",
-              "    <main style={{ minWidth: 320, padding: 16 }}>",
-              `      <h1>${toTitleCase(plan.projectName)}</h1>`,
-              "      <p>Popup scaffold generated by DevForge.</p>",
+              "    <main style={{ minWidth: 360, padding: 18, fontFamily: 'Georgia, serif', color: '#112233', background: 'linear-gradient(180deg, #f8f5ef 0%, #efe9dd 100%)' }}>",
+              `      <p style={{ textTransform: "uppercase", letterSpacing: "0.18em", fontSize: 11, color: "#7d5a32" }}>Extension details</p>`,
+              `      <h1 style={{ margin: "0.35rem 0 0" }}>${toTitleCase(plan.projectName)}</h1>`,
+              `      <p style={{ lineHeight: 1.6, color: "#3a4856" }}>${plan.metadata.description}</p>`,
+              "      <dl style={{ display: 'grid', gap: 12, marginTop: 16 }}>",
+              "        {details.map((detail) => (",
+              "          <div key={detail.label} style={{ padding: 12, borderRadius: 14, background: '#fffaf3', border: '1px solid #eadfcd' }}>",
+              "            <dt style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#7b6547' }}>{detail.label}</dt>",
+              "            <dd style={{ margin: '0.45rem 0 0', fontSize: 16, fontWeight: 600, color: '#15283b' }}>{detail.value}</dd>",
+              "          </div>",
+              "        ))}",
+              "      </dl>",
+              "      <pre style={{ marginTop: 16, padding: 12, borderRadius: 14, background: '#1b2430', color: '#f8f5ef', fontSize: 11, overflow: 'auto' }}>{JSON.stringify(extensionInfo, null, 2)}</pre>",
+              "      <p style={{ marginTop: 14, fontSize: 12, color: '#6d5a45' }}>{generatedWith}</p>",
               "    </main>",
               "  );",
               "}",
@@ -1956,8 +2349,17 @@ function chromeExtensionFiles(plan: ProjectPlan): GeneratedFile[] {
               "",
             ].join("\n")
           : [
+              `const extensionInfo = ${extensionInfo};`,
+              `const details = ${JSON.stringify(projectDetailsEntries(plan), null, 2)};`,
+              `const generatedWith = ${JSON.stringify(generatedWithText())};`,
+              "",
               "const root = document.getElementById(\"root\");",
-              `if (root) root.innerHTML = "<main style='min-width:320px;padding:16px'><h1>${toTitleCase(plan.projectName)}</h1><p>Popup scaffold generated by DevForge.</p></main>";`,
+              "if (root) {",
+              "  const items = details",
+              "    .map((detail) => `<div style=\"padding:12px;border-radius:14px;background:#fffaf3;border:1px solid #eadfcd\"><dt style=\"font-size:11px;text-transform:uppercase;letter-spacing:0.12em;color:#7b6547\">${detail.label}</dt><dd style=\"margin:0.45rem 0 0;font-size:16px;font-weight:600;color:#15283b\">${detail.value}</dd></div>`)",
+              "    .join(\"\");",
+              `  root.innerHTML = \`<main style="min-width:360px;padding:18px;font-family:Georgia,serif;color:#112233;background:linear-gradient(180deg,#f8f5ef 0%,#efe9dd 100%)"><p style="text-transform:uppercase;letter-spacing:0.18em;font-size:11px;color:#7d5a32">Extension details</p><h1 style="margin:0.35rem 0 0">${toTitleCase(plan.projectName)}</h1><p style="line-height:1.6;color:#3a4856">${plan.metadata.description}</p><dl style="display:grid;gap:12px;margin-top:16px">\${items}</dl><pre style="margin-top:16px;padding:12px;border-radius:14px;background:#1b2430;color:#f8f5ef;font-size:11px;overflow:auto">\${JSON.stringify(extensionInfo, null, 2)}</pre><p style="margin-top:14px;font-size:12px;color:#6d5a45">\${generatedWith}</p></main>\`;`,
+              "}",
               "",
             ].join("\n"),
       ),
@@ -2375,12 +2777,25 @@ function fullstackExtras(plan: ProjectPlan): GeneratedFile[] {
   }
 
   if (plan.frontend?.framework === "nextjs") {
+    const projectInfo = JSON.stringify(
+      projectMetadataPayload(plan, {
+        service: "fullstack-api",
+        endpoints: {
+          health: "/api/health",
+        },
+      }),
+      null,
+      2,
+    );
+
     return [
       makeFile(
         "app/api/health/route.ts",
         [
+          `const projectInfo = ${projectInfo};`,
+          "",
           "export async function GET() {",
-          "  return Response.json({ ok: true });",
+          "  return Response.json({ ok: true, status: \"healthy\", ...projectInfo });",
           "}",
           "",
         ].join("\n"),
@@ -2658,7 +3073,7 @@ function microfrontendFiles(
   const hostPlan: ProjectPlan = {
     ...workspacePlan,
     intent: "frontend-app",
-    architecture: "simple",
+    architecture: "microfrontend",
     backend: undefined,
     tooling: {
       ...workspacePlan.tooling,
@@ -2696,7 +3111,27 @@ function microfrontendFiles(
     files.push(makeFile("apps/host/tsconfig.json", localTsConfig()));
   }
   files.push(...prefixFiles("apps/host", testingFiles(hostPlan)));
-  files.push(...prefixFiles("apps/host", frontendFiles(hostPlan)));
+  files.push(
+    ...prefixFiles(
+      "apps/host",
+      frontendFiles(hostPlan, {
+        badge: "Microfrontend host",
+        heading: `${toTitleCase(workspacePlan.projectName)} Host`,
+        lead: `${workspacePlan.metadata.description} This host app is ready to orchestrate shared navigation and remote composition.`,
+        extraDetails: [
+          { label: "Role", value: "Host app" },
+          {
+            label: "Strategy",
+            value: toTitleCase(workspacePlan.workspace.microfrontendStrategy ?? "vite-federation"),
+          },
+          {
+            label: "Remotes",
+            value: workspacePlan.workspace.remoteApps.join(", "),
+          },
+        ],
+      }),
+    ),
+  );
 
   for (const remoteApp of workspacePlan.workspace.remoteApps) {
     const remotePlan = {
@@ -2724,7 +3159,24 @@ function microfrontendFiles(
       files.push(makeFile(`apps/remote-${remoteApp}/tsconfig.json`, localTsConfig()));
     }
     files.push(...prefixFiles(`apps/remote-${remoteApp}`, testingFiles(remotePlan)));
-    files.push(...prefixFiles(`apps/remote-${remoteApp}`, frontendFiles(remotePlan)));
+    files.push(
+      ...prefixFiles(
+        `apps/remote-${remoteApp}`,
+        frontendFiles(remotePlan, {
+          badge: "Microfrontend remote",
+          heading: `${toTitleCase(remoteApp)} Remote`,
+          lead: `${workspacePlan.metadata.description} This remote is ready to expose features back to the host application.`,
+          extraDetails: [
+            { label: "Role", value: "Remote app" },
+            { label: "Remote key", value: remoteApp },
+            {
+              label: "Strategy",
+              value: toTitleCase(workspacePlan.workspace.microfrontendStrategy ?? "vite-federation"),
+            },
+          ],
+        }),
+      ),
+    );
   }
 
   return files;

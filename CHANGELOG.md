@@ -6,6 +6,28 @@ The format follows Keep a Changelog and the version numbers follow Semantic Vers
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-03-25
+
+### Added
+
+- Generated richer starter surfaces across the supported intents:
+  frontend apps now render a project-details page,
+  backend APIs expose structured project metadata from `/` and `/health`,
+  CLI scaffolds print project info and support `--json`,
+  Chrome extensions show a detailed popup and log extension metadata,
+  and microfrontend host/remote apps identify their role and generation source.
+- Added regression coverage for starter surfaces across every supported intent.
+
+### Changed
+
+- Expanded the scaffold audit coverage so every intent now emits a clear primary experience surface instead of only a minimal placeholder.
+- Threaded DevForge package metadata through generated outputs so new projects show the creator, package name, and CLI version consistently.
+
+### Fixed
+
+- Corrected stale generated starter metadata by sourcing generator identity from the real CLI package instead of duplicating hardcoded values.
+- Tightened the microfrontend host/remote starter content so those apps no longer look like generic workspace frontends.
+
 ## [0.2.2] - 2026-03-25
 
 ### Changed

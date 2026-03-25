@@ -37,9 +37,11 @@ test("generator returns a runnable default frontend scaffold", () => {
   const paths = new Set(files.map((file) => file.path));
   const packageJsonFile = files.find((file) => file.path === "package.json");
   const readmeFile = files.find((file) => file.path === "README.md");
+  const appFile = files.find((file) => file.path === "src/App.tsx");
 
   assert.ok(packageJsonFile);
   assert.ok(readmeFile);
+  assert.ok(appFile);
 
   const packageJson = JSON.parse(packageJsonFile.content) as {
     scripts: Record<string, string>;
@@ -60,6 +62,8 @@ test("generator returns a runnable default frontend scaffold", () => {
   );
   assert.match(readmeFile.content, /Quick Start/);
   assert.match(readmeFile.content, /Common Commands/);
+  assert.match(appFile.content, /Project details/);
+  assert.match(appFile.content, /Created by Ali-dev11 via @ali-dev11\/devforge/);
 });
 
 test("fullstack scripts honor the selected package manager", () => {
@@ -137,7 +141,90 @@ test("microfrontend scaffolds skip generic workspace apps and include packageMan
   assert.ok(paths.has("apps/host/package.json"));
   assert.ok(paths.has("apps/remote-catalog/package.json"));
   assert.ok(paths.has("apps/remote-dashboard/package.json"));
+  assert.match(
+    files.find((file) => file.path === "apps/host/src/App.tsx")?.content ?? "",
+    /Microfrontend host/,
+  );
+  assert.match(
+    files.find((file) => file.path === "apps/remote-catalog/src/App.tsx")?.content ?? "",
+    /Remote app/,
+  );
   assert.equal(paths.has("apps/web/package.json"), false);
+});
+
+test("backend, cli, and extension scaffolds expose project metadata surfaces", () => {
+  const backendPlan = buildDefaultPlan(environment, cliOptions);
+  backendPlan.intent = "backend-api";
+  applyIntentDefaults(backendPlan);
+
+  const backendFiles = buildProjectFiles(backendPlan, environment);
+  const backendServer = backendFiles.find((file) => file.path === "src/server.ts");
+
+  assert.ok(backendServer);
+  assert.match(backendServer.content, /generatedBy/);
+  assert.match(backendServer.content, /packageName/);
+  assert.match(backendServer.content, /app\.get\("\/health"/);
+
+  const cliPlan = buildDefaultPlan(environment, cliOptions);
+  cliPlan.intent = "cli-tool";
+  applyIntentDefaults(cliPlan);
+
+  const cliFiles = buildProjectFiles(cliPlan, environment);
+  const cliEntry = cliFiles.find((file) => file.path === "src/index.ts");
+
+  assert.ok(cliEntry);
+  assert.match(cliEntry.content, /--json/);
+  assert.match(cliEntry.content, /generatedBy/);
+
+  const extensionPlan = buildDefaultPlan(environment, cliOptions);
+  extensionPlan.intent = "chrome-extension";
+  applyIntentDefaults(extensionPlan);
+
+  const extensionFiles = buildProjectFiles(extensionPlan, environment);
+  const popupFile = extensionFiles.find((file) => file.path === "src/popup.tsx");
+  const backgroundFile = extensionFiles.find((file) => file.path === "src/background.ts");
+
+  assert.ok(popupFile);
+  assert.ok(backgroundFile);
+  assert.match(popupFile.content, /Extension details/);
+  assert.match(popupFile.content, /Created by Ali-dev11 via @ali-dev11\/devforge/);
+  assert.match(backgroundFile.content, /extensionInfo/);
+});
+
+test("all intents emit a primary starter surface", () => {
+  const expectations: Array<{
+    intent: "landing-page" | "frontend-app" | "backend-api" | "fullstack-app" | "microfrontend-system" | "chrome-extension" | "cli-tool";
+    paths: string[];
+    architecture?: "microfrontend";
+  }> = [
+    { intent: "landing-page", paths: ["src/App.tsx", "README.md"] },
+    { intent: "frontend-app", paths: ["src/App.tsx", "README.md"] },
+    { intent: "backend-api", paths: ["src/server.ts", "README.md"] },
+    { intent: "fullstack-app", paths: ["src/App.tsx", "src/server.ts", "README.md"] },
+    {
+      intent: "microfrontend-system",
+      architecture: "microfrontend",
+      paths: ["apps/host/src/App.tsx", "apps/remote-catalog/src/App.tsx", "docs/microfrontends.md"],
+    },
+    { intent: "chrome-extension", paths: ["manifest.json", "src/popup.tsx", "README.md"] },
+    { intent: "cli-tool", paths: ["src/index.ts", "README.md"] },
+  ];
+
+  for (const expectation of expectations) {
+    const plan = buildDefaultPlan(environment, cliOptions);
+    plan.intent = expectation.intent;
+    if (expectation.architecture) {
+      plan.architecture = expectation.architecture;
+    }
+    applyIntentDefaults(plan);
+
+    const files = buildProjectFiles(plan, environment);
+    const paths = new Set(files.map((file) => file.path));
+
+    for (const expectedPath of expectation.paths) {
+      assert.ok(paths.has(expectedPath), `${expectation.intent} should include ${expectedPath}`);
+    }
+  }
 });
 
 test("generateProject rejects file targets that are not directories", async () => {
