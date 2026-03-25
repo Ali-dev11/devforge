@@ -5,8 +5,10 @@ import {
   normalizeProjectPlan,
 } from "../src/engines/decision.js";
 import {
+  applyIntentDefaultsForChange,
   applyIntentDefaults,
   buildDefaultPlan,
+  getRecommendedRuleCategories,
   getArchitectureChoicesForIntent,
 } from "../src/engines/prompts.js";
 import type { CliOptions, EnvironmentInfo } from "../src/types.js";
@@ -179,4 +181,50 @@ test("normalization removes backend AI categories from frontend-only plans", () 
     result.warnings.join(" "),
     /Removed AI rule categories that do not apply to the selected project stack/,
   );
+});
+
+test("intent changes reset scoped defaults before optional sections are skipped", () => {
+  const landingPagePlan = buildDefaultPlan(environment, cliOptions);
+  applyIntentDefaultsForChange(landingPagePlan, landingPagePlan.intent);
+  landingPagePlan.intent = "landing-page";
+
+  applyIntentDefaultsForChange(landingPagePlan, "frontend-app");
+
+  assert.equal(landingPagePlan.frontend?.framework, "react-vite");
+  assert.equal(landingPagePlan.frontend?.rendering, "static");
+  assert.equal(landingPagePlan.frontend?.state, "none");
+  assert.equal(landingPagePlan.frontend?.dataFetching, "native-fetch");
+
+  const backendPlan = buildDefaultPlan(environment, cliOptions);
+  backendPlan.intent = "backend-api";
+
+  applyIntentDefaultsForChange(backendPlan, "frontend-app");
+
+  assert.equal(backendPlan.frontend, undefined);
+  assert.equal(backendPlan.backend?.framework, "hono");
+  assert.equal(backendPlan.testing.runner, "jest");
+  assert.equal(backendPlan.testing.environment, "node");
+});
+
+test("recommended AI categories expand default selections to the current stack", () => {
+  const frontendPlan = buildDefaultPlan(environment, cliOptions);
+
+  assert.deepEqual(getRecommendedRuleCategories(frontendPlan), [
+    "core",
+    "security",
+    "testing",
+    "frontend",
+  ]);
+
+  const fullstackPlan = buildDefaultPlan(environment, cliOptions);
+  fullstackPlan.intent = "fullstack-app";
+  applyIntentDefaultsForChange(fullstackPlan, "frontend-app");
+
+  assert.deepEqual(getRecommendedRuleCategories(fullstackPlan), [
+    "core",
+    "security",
+    "testing",
+    "frontend",
+    "backend",
+  ]);
 });

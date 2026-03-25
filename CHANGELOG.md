@@ -6,6 +6,19 @@ The format follows Keep a Changelog and the version numbers follow Semantic Vers
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-03-25
+
+### Changed
+
+- Split the interactive flow into core decisions and optional advanced sections so users can keep recommended defaults for metadata, frontend libraries, backend capabilities, testing, AI rules, and tooling without answering every detail prompt.
+- Skipped one-option frontend prompts automatically for constrained flows such as microfrontend scaffolds.
+- Expanded default AI rule selection to the full stack-relevant category set when users keep the recommended configuration.
+
+### Fixed
+
+- Reset intent-specific defaults when users switch project type during prompting, preventing stale frontend-app defaults from leaking into landing page, backend API, chrome extension, and other flows.
+- Ensured backend and testing defaults remain valid when optional advanced questions are skipped, including a safe default adapter for NestJS.
+
 ## [0.2.1] - 2026-03-25
 
 ### Fixed

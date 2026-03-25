@@ -38,6 +38,7 @@ import type {
   FrontendConfig,
   ProjectIntent,
   ProjectPlan,
+  RuleCategory,
   TestingConfig,
   ToolingConfig,
 } from "../types.js";
@@ -131,6 +132,30 @@ function defaultTestingConfig(intent: ProjectIntent): TestingConfig {
     environment: "jsdom",
     includeExampleTests: true,
   };
+}
+
+function usesDefaultRuleCategories(categories: RuleCategory[]): boolean {
+  const normalized = dedupe(categories);
+  return (
+    normalized.length === DEFAULT_RULE_CATEGORIES.length &&
+    DEFAULT_RULE_CATEGORIES.every((category) => normalized.includes(category))
+  );
+}
+
+export function getRecommendedRuleCategories(plan: ProjectPlan): RuleCategory[] {
+  const availableRuleCategories = getAvailableRuleCategories(plan);
+  const selectedRuleCategories = dedupe(
+    plan.ai.categories.filter((category) => availableRuleCategories.includes(category)),
+  );
+
+  if (
+    selectedRuleCategories.length === 0 ||
+    usesDefaultRuleCategories(selectedRuleCategories)
+  ) {
+    return availableRuleCategories;
+  }
+
+  return selectedRuleCategories;
 }
 
 export function buildDefaultPlan(
@@ -238,6 +263,29 @@ export function getArchitectureChoicesForIntent(
 }
 
 export function applyIntentDefaults(plan: ProjectPlan): ProjectPlan {
+  return applyIntentDefaultsForChange(plan);
+}
+
+export function applyIntentDefaultsForChange(
+  plan: ProjectPlan,
+  previousIntent?: ProjectIntent,
+): ProjectPlan {
+  if (previousIntent && previousIntent !== plan.intent) {
+    if (needsFrontend(plan.intent)) {
+      plan.frontend = defaultFrontendConfig(plan.intent);
+    }
+
+    if (needsBackend(plan.intent)) {
+      plan.backend = defaultBackendConfig();
+    }
+
+    if (needsChromeExtension(plan.intent)) {
+      plan.extension = defaultExtensionConfig();
+    }
+
+    plan.testing = defaultTestingConfig(plan.intent);
+  }
+
   if (needsFrontend(plan.intent)) {
     plan.frontend ??= defaultFrontendConfig(plan.intent);
 
@@ -360,13 +408,23 @@ export async function collectProjectPlan(
         initial: getInitialChoiceIndex(TEMPLATE_TIER_CHOICES, base.templateTier),
       },
       {
-        type: "text",
+        type: "toggle",
+        name: "customizeMetadata",
+        message: "Customize project metadata?",
+        initial: false,
+        active: "yes",
+        inactive: "no",
+      },
+      {
+        type: (_: unknown, values: Record<string, unknown>) =>
+          values.customizeMetadata ? "text" : null,
         name: "description",
         message: "Project description",
         initial: base.metadata.description,
       },
       {
-        type: "select",
+        type: (_: unknown, values: Record<string, unknown>) =>
+          values.customizeMetadata ? "select" : null,
         name: "license",
         message: "License",
         choices: LICENSE_CHOICES,
@@ -395,7 +453,7 @@ export async function collectProjectPlan(
       license: setupDetailsAnswers.license ?? base.metadata.license,
     },
   };
-  applyIntentDefaults(plan);
+  applyIntentDefaultsForChange(plan, base.intent);
 
   if (needsFrontend(plan.intent)) {
     const availableFrontendFrameworkChoices =
@@ -407,65 +465,90 @@ export async function collectProjectPlan(
         ? FRONTEND_RENDERING_CHOICES.filter((choice) => choice.value === "client")
         : FRONTEND_RENDERING_CHOICES;
 
-    const frontendAnswers = await prompts(
+    const frontendCoreAnswers = await prompts(
       [
         {
-          type: "select",
+          type: availableFrontendFrameworkChoices.length > 1 ? "select" : null,
           name: "framework",
           message: "Frontend framework",
           choices: availableFrontendFrameworkChoices,
           initial: getInitialChoiceIndex(availableFrontendFrameworkChoices, plan.frontend?.framework),
         },
         {
-          type: "select",
+          type: availableRenderingChoices.length > 1 ? "select" : null,
           name: "rendering",
           message: "Rendering mode",
           choices: availableRenderingChoices,
           initial: getInitialChoiceIndex(availableRenderingChoices, plan.frontend?.rendering),
         },
         {
-          type: "select",
-          name: "styling",
-          message: "Styling",
-          choices: STYLING_CHOICES,
-          initial: getInitialChoiceIndex(STYLING_CHOICES, plan.frontend?.styling),
-        },
-        {
-          type: "select",
-          name: "uiLibrary",
-          message: "UI library",
-          choices: UI_LIBRARY_CHOICES,
-          initial: getInitialChoiceIndex(UI_LIBRARY_CHOICES, plan.frontend?.uiLibrary),
-        },
-        {
-          type: plan.intent === "landing-page" ? null : "select",
-          name: "state",
-          message: "State layer",
-          choices: STATE_CHOICES,
-          initial: getInitialChoiceIndex(STATE_CHOICES, plan.frontend?.state),
-        },
-        {
-          type: plan.intent === "landing-page" ? null : "select",
-          name: "dataFetching",
-          message: "Data fetching",
-          choices: DATA_FETCHING_CHOICES,
-          initial: getInitialChoiceIndex(DATA_FETCHING_CHOICES, plan.frontend?.dataFetching),
+          type: "toggle",
+          name: "customizeFrontend",
+          message:
+            plan.intent === "landing-page"
+              ? "Customize frontend styling and UI setup?"
+              : "Customize frontend libraries and data layer?",
+          initial: false,
+          active: "yes",
+          inactive: "no",
         },
       ],
       { onCancel: cancelHandler },
     );
 
     plan.frontend = {
-      framework: frontendAnswers.framework ?? plan.frontend?.framework ?? "react-vite",
-      rendering: frontendAnswers.rendering ?? plan.frontend?.rendering ?? "client",
-      styling: frontendAnswers.styling ?? plan.frontend?.styling ?? "tailwind-css",
-      uiLibrary: frontendAnswers.uiLibrary ?? plan.frontend?.uiLibrary ?? "none",
-      state: frontendAnswers.state ?? plan.frontend?.state ?? "none",
-      dataFetching:
-        frontendAnswers.dataFetching ??
-        plan.frontend?.dataFetching ??
-        "native-fetch",
+      framework: frontendCoreAnswers.framework ?? plan.frontend?.framework ?? "react-vite",
+      rendering: frontendCoreAnswers.rendering ?? plan.frontend?.rendering ?? "client",
+      styling: plan.frontend?.styling ?? "tailwind-css",
+      uiLibrary: plan.frontend?.uiLibrary ?? "none",
+      state: plan.frontend?.state ?? "none",
+      dataFetching: plan.frontend?.dataFetching ?? "native-fetch",
     };
+
+    if (frontendCoreAnswers.customizeFrontend) {
+      const frontendAnswers = await prompts(
+        [
+          {
+            type: "select",
+            name: "styling",
+            message: "Styling",
+            choices: STYLING_CHOICES,
+            initial: getInitialChoiceIndex(STYLING_CHOICES, plan.frontend?.styling),
+          },
+          {
+            type: "select",
+            name: "uiLibrary",
+            message: "UI library",
+            choices: UI_LIBRARY_CHOICES,
+            initial: getInitialChoiceIndex(UI_LIBRARY_CHOICES, plan.frontend?.uiLibrary),
+          },
+          {
+            type: plan.intent === "landing-page" ? null : "select",
+            name: "state",
+            message: "State layer",
+            choices: STATE_CHOICES,
+            initial: getInitialChoiceIndex(STATE_CHOICES, plan.frontend?.state),
+          },
+          {
+            type: plan.intent === "landing-page" ? null : "select",
+            name: "dataFetching",
+            message: "Data fetching",
+            choices: DATA_FETCHING_CHOICES,
+            initial: getInitialChoiceIndex(DATA_FETCHING_CHOICES, plan.frontend?.dataFetching),
+          },
+        ],
+        { onCancel: cancelHandler },
+      );
+
+      plan.frontend = {
+        framework: plan.frontend.framework,
+        rendering: plan.frontend.rendering,
+        styling: frontendAnswers.styling ?? plan.frontend.styling,
+        uiLibrary: frontendAnswers.uiLibrary ?? plan.frontend.uiLibrary,
+        state: frontendAnswers.state ?? plan.frontend.state,
+        dataFetching: frontendAnswers.dataFetching ?? plan.frontend.dataFetching,
+      };
+    }
   } else {
     delete plan.frontend;
   }
@@ -480,7 +563,7 @@ export async function collectProjectPlan(
       { title: "Express", value: "express" },
     ];
 
-    const backendAnswers = await prompts(
+    const backendCoreAnswers = await prompts(
       [
         {
           type: "select",
@@ -497,54 +580,10 @@ export async function collectProjectPlan(
           initial: getInitialChoiceIndex(languageChoices, plan.backend?.language),
         },
         {
-          type: (_: unknown, values: Record<string, unknown>) =>
-            values.framework === "nestjs" ? "select" : null,
-          name: "adapter",
-          message: "NestJS adapter",
-          choices: adapterChoices,
-          initial: getInitialChoiceIndex(adapterChoices, plan.backend?.adapter),
-        },
-        {
-          type: "multiselect",
-          name: "auth",
-          message: "Authentication",
-          choices: withSelected(AUTH_CHOICES, plan.backend?.auth ?? []),
-        },
-        {
-          type: "select",
-          name: "orm",
-          message: "ORM",
-          choices: ORM_CHOICES,
-          initial: getInitialChoiceIndex(ORM_CHOICES, plan.backend?.orm),
-        },
-        {
-          type: "select",
-          name: "database",
-          message: "Database",
-          choices: DATABASE_CHOICES,
-          initial: getInitialChoiceIndex(DATABASE_CHOICES, plan.backend?.database),
-        },
-        {
           type: "toggle",
-          name: "redis",
-          message: "Add Redis?",
-          initial: plan.backend?.redis ?? false,
-          active: "yes",
-          inactive: "no",
-        },
-        {
-          type: "toggle",
-          name: "swagger",
-          message: "Add Swagger docs?",
-          initial: plan.backend?.swagger ?? true,
-          active: "yes",
-          inactive: "no",
-        },
-        {
-          type: "toggle",
-          name: "websockets",
-          message: "Add WebSockets?",
-          initial: plan.backend?.websockets ?? false,
+          name: "customizeBackend",
+          message: "Configure backend capabilities?",
+          initial: false,
           active: "yes",
           inactive: "no",
         },
@@ -552,17 +591,95 @@ export async function collectProjectPlan(
       { onCancel: cancelHandler },
     );
 
+    const backendFramework = backendCoreAnswers.framework ?? plan.backend?.framework ?? "hono";
+    const backendLanguage = backendCoreAnswers.language ?? plan.backend?.language ?? "typescript";
+
     plan.backend = {
-      framework: backendAnswers.framework ?? plan.backend?.framework ?? "hono",
-      language: backendAnswers.language ?? plan.backend?.language ?? "typescript",
-      adapter: backendAnswers.adapter,
-      auth: backendAnswers.auth ?? [],
-      orm: backendAnswers.orm ?? "none",
-      database: backendAnswers.database ?? "none",
-      redis: Boolean(backendAnswers.redis),
-      swagger: Boolean(backendAnswers.swagger),
-      websockets: Boolean(backendAnswers.websockets),
+      framework: backendFramework,
+      language: backendLanguage,
+      adapter:
+        backendFramework === "nestjs" ? plan.backend?.adapter ?? "fastify" : undefined,
+      auth: plan.backend?.auth ?? [],
+      orm: plan.backend?.orm ?? "none",
+      database: plan.backend?.database ?? "none",
+      redis: plan.backend?.redis ?? false,
+      swagger: plan.backend?.swagger ?? true,
+      websockets: plan.backend?.websockets ?? false,
     };
+
+    if (backendCoreAnswers.customizeBackend) {
+      const backendAnswers = await prompts(
+        [
+          {
+            type: plan.backend.framework === "nestjs" ? "select" : null,
+            name: "adapter",
+            message: "NestJS adapter",
+            choices: adapterChoices,
+            initial: getInitialChoiceIndex(adapterChoices, plan.backend?.adapter),
+          },
+          {
+            type: "multiselect",
+            name: "auth",
+            message: "Authentication",
+            choices: withSelected(AUTH_CHOICES, plan.backend?.auth ?? []),
+          },
+          {
+            type: "select",
+            name: "orm",
+            message: "ORM",
+            choices: ORM_CHOICES,
+            initial: getInitialChoiceIndex(ORM_CHOICES, plan.backend?.orm),
+          },
+          {
+            type: "select",
+            name: "database",
+            message: "Database",
+            choices: DATABASE_CHOICES,
+            initial: getInitialChoiceIndex(DATABASE_CHOICES, plan.backend?.database),
+          },
+          {
+            type: "toggle",
+            name: "redis",
+            message: "Add Redis?",
+            initial: plan.backend?.redis ?? false,
+            active: "yes",
+            inactive: "no",
+          },
+          {
+            type: "toggle",
+            name: "swagger",
+            message: "Add Swagger docs?",
+            initial: plan.backend?.swagger ?? true,
+            active: "yes",
+            inactive: "no",
+          },
+          {
+            type: "toggle",
+            name: "websockets",
+            message: "Add WebSockets?",
+            initial: plan.backend?.websockets ?? false,
+            active: "yes",
+            inactive: "no",
+          },
+        ],
+        { onCancel: cancelHandler },
+      );
+
+      plan.backend = {
+        framework: plan.backend.framework,
+        language: plan.backend.language,
+        adapter:
+          plan.backend.framework === "nestjs"
+            ? backendAnswers.adapter ?? plan.backend.adapter ?? "fastify"
+            : undefined,
+        auth: backendAnswers.auth ?? [],
+        orm: backendAnswers.orm ?? "none",
+        database: backendAnswers.database ?? "none",
+        redis: Boolean(backendAnswers.redis),
+        swagger: Boolean(backendAnswers.swagger),
+        websockets: Boolean(backendAnswers.websockets),
+      };
+    }
   } else {
     delete plan.backend;
   }
@@ -618,7 +735,7 @@ export async function collectProjectPlan(
   }
 
   if (needsChromeExtension(plan.intent)) {
-    const extensionAnswers = await prompts(
+    const extensionCoreAnswers = await prompts(
       [
         {
           type: "select",
@@ -628,25 +745,9 @@ export async function collectProjectPlan(
         },
         {
           type: "toggle",
-          name: "includesBackground",
-          message: "Include background script?",
-          initial: true,
-          active: "yes",
-          inactive: "no",
-        },
-        {
-          type: "toggle",
-          name: "includesContent",
-          message: "Include content script?",
-          initial: true,
-          active: "yes",
-          inactive: "no",
-        },
-        {
-          type: "toggle",
-          name: "includesPopup",
-          message: "Include popup UI?",
-          initial: true,
+          name: "customizeExtension",
+          message: "Customize extension entry points?",
+          initial: false,
           active: "yes",
           inactive: "no",
         },
@@ -655,12 +756,52 @@ export async function collectProjectPlan(
     );
 
     plan.extension = {
-      flavor: extensionAnswers.flavor ?? "react",
-      includesBackground: Boolean(extensionAnswers.includesBackground),
-      includesContent: Boolean(extensionAnswers.includesContent),
-      includesPopup: Boolean(extensionAnswers.includesPopup),
+      flavor: extensionCoreAnswers.flavor ?? plan.extension?.flavor ?? "react",
+      includesBackground: plan.extension?.includesBackground ?? true,
+      includesContent: plan.extension?.includesContent ?? true,
+      includesPopup: plan.extension?.includesPopup ?? true,
       manifestVersion: "v3",
     };
+
+    if (extensionCoreAnswers.customizeExtension) {
+      const extensionAnswers = await prompts(
+        [
+          {
+            type: "toggle",
+            name: "includesBackground",
+            message: "Include background script?",
+            initial: plan.extension.includesBackground,
+            active: "yes",
+            inactive: "no",
+          },
+          {
+            type: "toggle",
+            name: "includesContent",
+            message: "Include content script?",
+            initial: plan.extension.includesContent,
+            active: "yes",
+            inactive: "no",
+          },
+          {
+            type: "toggle",
+            name: "includesPopup",
+            message: "Include popup UI?",
+            initial: plan.extension.includesPopup,
+            active: "yes",
+            inactive: "no",
+          },
+        ],
+        { onCancel: cancelHandler },
+      );
+
+      plan.extension = {
+        flavor: plan.extension.flavor,
+        includesBackground: Boolean(extensionAnswers.includesBackground),
+        includesContent: Boolean(extensionAnswers.includesContent),
+        includesPopup: Boolean(extensionAnswers.includesPopup),
+        manifestVersion: "v3",
+      };
+    }
   }
 
   const availableTestRunnerChoices = TEST_RUNNER_CHOICES.filter((choice) => {
@@ -679,7 +820,7 @@ export async function collectProjectPlan(
     return true;
   });
 
-  const testingAnswers = await prompts(
+  const testingSetupAnswers = await prompts(
     [
       {
         type: "toggle",
@@ -691,38 +832,10 @@ export async function collectProjectPlan(
       },
       {
         type: (_: unknown, values: Record<string, unknown>) =>
-          values.enabled ? "select" : null,
-        name: "runner",
-        message: "Test runner",
-        choices: availableTestRunnerChoices,
-        initial: getInitialChoiceIndex(
-          availableTestRunnerChoices,
-          plan.testing.runner === "none" ? undefined : plan.testing.runner,
-        ),
-      },
-      {
-        type: (_: unknown, values: Record<string, unknown>) =>
-          values.enabled &&
-          values.runner !== "playwright" &&
-          values.runner !== "cypress"
-            ? "select"
-            : null,
-        name: "environment",
-        message: "Test environment",
-        choices: availableTestEnvironmentChoices,
-        initial: getInitialChoiceIndex(
-          availableTestEnvironmentChoices,
-          plan.testing.environment === "none" || plan.testing.environment === "browser-e2e"
-            ? undefined
-            : plan.testing.environment,
-        ),
-      },
-      {
-        type: (_: unknown, values: Record<string, unknown>) =>
           values.enabled ? "toggle" : null,
-        name: "includeExampleTests",
-        message: "Generate example test cases?",
-        initial: plan.testing.includeExampleTests,
+        name: "customizeTesting",
+        message: "Customize testing setup?",
+        initial: false,
         active: "yes",
         inactive: "no",
       },
@@ -730,101 +843,183 @@ export async function collectProjectPlan(
     { onCancel: cancelHandler },
   );
 
-  plan.testing = {
-    enabled: Boolean(testingAnswers.enabled),
-    runner: testingAnswers.enabled
-      ? testingAnswers.runner ?? plan.testing.runner
-      : "none",
-    environment: testingAnswers.enabled
-      ? testingAnswers.runner === "playwright" || testingAnswers.runner === "cypress"
-        ? "browser-e2e"
-        : testingAnswers.environment ?? plan.testing.environment
-      : "none",
-    includeExampleTests: Boolean(testingAnswers.includeExampleTests ?? plan.testing.includeExampleTests),
-  };
+  if (testingSetupAnswers.enabled && testingSetupAnswers.customizeTesting) {
+    const testingAnswers = await prompts(
+      [
+        {
+          type: "select",
+          name: "runner",
+          message: "Test runner",
+          choices: availableTestRunnerChoices,
+          initial: getInitialChoiceIndex(
+            availableTestRunnerChoices,
+            plan.testing.runner === "none" ? undefined : plan.testing.runner,
+          ),
+        },
+        {
+          type: (_: unknown, values: Record<string, unknown>) =>
+            values.runner !== "playwright" && values.runner !== "cypress"
+              ? "select"
+              : null,
+          name: "environment",
+          message: "Test environment",
+          choices: availableTestEnvironmentChoices,
+          initial: getInitialChoiceIndex(
+            availableTestEnvironmentChoices,
+            plan.testing.environment === "none" || plan.testing.environment === "browser-e2e"
+              ? undefined
+              : plan.testing.environment,
+          ),
+        },
+        {
+          type: "toggle",
+          name: "includeExampleTests",
+          message: "Generate example test cases?",
+          initial: plan.testing.includeExampleTests,
+          active: "yes",
+          inactive: "no",
+        },
+      ],
+      { onCancel: cancelHandler },
+    );
 
-  const availableRuleCategories = getAvailableRuleCategories(plan);
-  const selectedRuleCategories = dedupe(
-    plan.ai.categories.filter((category) => availableRuleCategories.includes(category)),
-  );
+    plan.testing = {
+      enabled: true,
+      runner: testingAnswers.runner ?? plan.testing.runner,
+      environment:
+        testingAnswers.runner === "playwright" || testingAnswers.runner === "cypress"
+          ? "browser-e2e"
+          : testingAnswers.environment ?? plan.testing.environment,
+      includeExampleTests: Boolean(
+        testingAnswers.includeExampleTests ?? plan.testing.includeExampleTests,
+      ),
+    };
+  } else {
+    plan.testing = {
+      enabled: Boolean(testingSetupAnswers.enabled),
+      runner: testingSetupAnswers.enabled ? plan.testing.runner : "none",
+      environment: testingSetupAnswers.enabled ? plan.testing.environment : "none",
+      includeExampleTests: testingSetupAnswers.enabled
+        ? plan.testing.includeExampleTests
+        : false,
+    };
+  }
 
-  const aiAnswers = await prompts(
+  plan.ai.categories = getRecommendedRuleCategories(plan);
+
+  const aiSetupAnswers = await prompts(
     [
       {
-        type: "multiselect",
-        name: "tools",
-        message: "AI tools to configure",
-        choices: withSelected(AI_TOOL_CHOICES, plan.ai.tools),
-      },
-      {
-        type: "select",
-        name: "ruleMode",
-        message: "Rule mode",
-        choices: RULE_MODE_CHOICES,
-        initial: getInitialChoiceIndex(RULE_MODE_CHOICES, plan.ai.ruleMode),
-      },
-      {
-        type: "multiselect",
-        name: "categories",
-        message: "Rule categories",
-        choices: withSelected(
-          RULE_CATEGORY_CHOICES.filter((choice) => availableRuleCategories.includes(choice.value)),
-          selectedRuleCategories.length > 0 ? selectedRuleCategories : availableRuleCategories,
-        ),
+        type: "toggle",
+        name: "customizeAi",
+        message: "Customize AI tools and rules?",
+        initial: false,
+        active: "yes",
+        inactive: "no",
       },
     ],
     { onCancel: cancelHandler },
   );
 
-  plan.ai = {
-    tools: aiAnswers.tools ?? plan.ai.tools,
-    ruleMode: aiAnswers.ruleMode ?? plan.ai.ruleMode,
-    categories: aiAnswers.categories ?? plan.ai.categories,
-  };
+  if (aiSetupAnswers.customizeAi) {
+    const availableRuleCategories = getAvailableRuleCategories(plan);
+    const aiAnswers = await prompts(
+      [
+        {
+          type: "multiselect",
+          name: "tools",
+          message: "AI tools to configure",
+          choices: withSelected(AI_TOOL_CHOICES, plan.ai.tools),
+        },
+        {
+          type: "select",
+          name: "ruleMode",
+          message: "Rule mode",
+          choices: RULE_MODE_CHOICES,
+          initial: getInitialChoiceIndex(RULE_MODE_CHOICES, plan.ai.ruleMode),
+        },
+        {
+          type: "multiselect",
+          name: "categories",
+          message: "Rule categories",
+          choices: withSelected(
+            RULE_CATEGORY_CHOICES.filter((choice) => availableRuleCategories.includes(choice.value)),
+            plan.ai.categories,
+          ),
+        },
+      ],
+      { onCancel: cancelHandler },
+    );
 
-  const toolingAnswers = await prompts(
+    plan.ai = {
+      tools: aiAnswers.tools ?? plan.ai.tools,
+      ruleMode: aiAnswers.ruleMode ?? plan.ai.ruleMode,
+      categories: aiAnswers.categories ?? plan.ai.categories,
+    };
+  }
+
+  const toolingSetupAnswers = await prompts(
     [
       {
-        type: "multiselect",
-        name: "tooling",
-        message: "DevOps and tooling",
-        choices: withSelected(
-          [
-            { title: "ESLint", value: "eslint" },
-            { title: "Prettier", value: "prettier" },
-            { title: "Husky", value: "husky" },
-            { title: "Commitlint", value: "commitlint" },
-            { title: "Docker", value: "docker" },
-            { title: "GitHub Actions", value: "githubActions" },
-          ],
-          [
-            ...(plan.tooling.eslint ? ["eslint"] : []),
-            ...(plan.tooling.prettier ? ["prettier"] : []),
-            ...(plan.tooling.husky ? ["husky"] : []),
-            ...(plan.tooling.commitlint ? ["commitlint"] : []),
-            ...(plan.tooling.docker ? ["docker"] : []),
-            ...(plan.tooling.githubActions ? ["githubActions"] : []),
-          ],
-        ),
+        type: "toggle",
+        name: "customizeTooling",
+        message: "Customize linting, formatting, hooks, and DevOps tooling?",
+        initial: false,
+        active: "yes",
+        inactive: "no",
       },
     ],
     { onCancel: cancelHandler },
   );
 
-  const enabledTooling = new Set(toolingAnswers.tooling ?? []);
-  plan.tooling = {
-    eslint: enabledTooling.has("eslint"),
-    eslintProfile: enabledTooling.has("eslint") ? "moderate" : plan.tooling.eslintProfile,
-    prettier: enabledTooling.has("prettier"),
-    prettierProfile: enabledTooling.has("prettier") ? "moderate" : plan.tooling.prettierProfile,
-    husky: enabledTooling.has("husky"),
-    huskyProfile: enabledTooling.has("husky") ? "moderate" : plan.tooling.huskyProfile,
-    commitlint: enabledTooling.has("commitlint"),
-    docker: enabledTooling.has("docker"),
-    githubActions: enabledTooling.has("githubActions"),
-  };
+  if (toolingSetupAnswers.customizeTooling) {
+    const toolingAnswers = await prompts(
+      [
+        {
+          type: "multiselect",
+          name: "tooling",
+          message: "DevOps and tooling",
+          choices: withSelected(
+            [
+              { title: "ESLint", value: "eslint" },
+              { title: "Prettier", value: "prettier" },
+              { title: "Husky", value: "husky" },
+              { title: "Commitlint", value: "commitlint" },
+              { title: "Docker", value: "docker" },
+              { title: "GitHub Actions", value: "githubActions" },
+            ],
+            [
+              ...(plan.tooling.eslint ? ["eslint"] : []),
+              ...(plan.tooling.prettier ? ["prettier"] : []),
+              ...(plan.tooling.husky ? ["husky"] : []),
+              ...(plan.tooling.commitlint ? ["commitlint"] : []),
+              ...(plan.tooling.docker ? ["docker"] : []),
+              ...(plan.tooling.githubActions ? ["githubActions"] : []),
+            ],
+          ),
+        },
+      ],
+      { onCancel: cancelHandler },
+    );
 
-  if (plan.tooling.eslint || plan.tooling.prettier || plan.tooling.husky) {
+    const enabledTooling = new Set(toolingAnswers.tooling ?? []);
+    plan.tooling = {
+      eslint: enabledTooling.has("eslint"),
+      eslintProfile: enabledTooling.has("eslint") ? "moderate" : plan.tooling.eslintProfile,
+      prettier: enabledTooling.has("prettier"),
+      prettierProfile: enabledTooling.has("prettier") ? "moderate" : plan.tooling.prettierProfile,
+      husky: enabledTooling.has("husky"),
+      huskyProfile: enabledTooling.has("husky") ? "moderate" : plan.tooling.huskyProfile,
+      commitlint: enabledTooling.has("commitlint"),
+      docker: enabledTooling.has("docker"),
+      githubActions: enabledTooling.has("githubActions"),
+    };
+  }
+
+  if (
+    toolingSetupAnswers.customizeTooling &&
+    (plan.tooling.eslint || plan.tooling.prettier || plan.tooling.husky)
+  ) {
     const policyAnswers = await prompts(
       [
         {
