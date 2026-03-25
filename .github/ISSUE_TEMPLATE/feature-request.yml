@@ -1,0 +1,41 @@
+name: Feature request
+description: Suggest a new capability or improvement for DevForge CLI
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or opportunity
+      description: What developer problem should this solve?
+      placeholder: Describe the workflow gap or pain point.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What should DevForge do?
+      placeholder: Describe the desired behavior or UX.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any alternatives or workarounds you evaluated?
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - CLI UX
+        - Frontend scaffolding
+        - Backend scaffolding
+        - Testing setup
+        - AI rules
+        - Documentation
+        - Publishing and release
+    validations:
+      required: true

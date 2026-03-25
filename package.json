@@ -1,0 +1,70 @@
+{
+  "name": "create-devforge",
+  "version": "0.1.0",
+  "description": "Production-focused AI-native project scaffolding CLI for JavaScript and TypeScript teams.",
+  "license": "MIT",
+  "author": "Ali-dev11",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "homepage": "https://ali-dev11.github.io/devforge/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Ali-dev11/devforge.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Ali-dev11/devforge/issues"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "create-devforge": "./dist/bin/create-devforge.js",
+    "devforge": "./dist/bin/devforge.js"
+  },
+  "preferGlobal": true,
+  "sideEffects": false,
+  "keywords": [
+    "cli",
+    "scaffolding",
+    "project-generator",
+    "typescript",
+    "javascript",
+    "ai",
+    "devforge"
+  ],
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "clean": "node --eval \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "build": "npm run clean && tsc -p tsconfig.json",
+    "dev": "tsx src/bin/devforge.ts",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --import tsx --test test/**/*.test.ts",
+    "check": "npm run lint && npm run typecheck && npm run test && npm run build",
+    "prepack": "npm run check",
+    "smoke": "npm run build && node --eval \"require('node:fs').rmSync('/tmp/devforge-smoke', { recursive: true, force: true })\" && node dist/bin/devforge.js init --yes --skip-install --output /tmp/devforge-smoke"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "prompts": "^2.4.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "^8.57.1",
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
+    "@types/node": "^25.5.0",
+    "@types/prompts": "^2.4.9",
+    "eslint": "^8.57.1",
+    "globals": "^17.4.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}
