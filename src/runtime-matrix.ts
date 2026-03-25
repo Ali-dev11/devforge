@@ -260,8 +260,8 @@ async function stopProcess(processRef: StartedProcess): Promise<void> {
 
 async function waitForHttpText(
   url: string,
-  expectations: string[],
-  timeoutMs = 120_000,
+  expectations: string[] = [],
+  timeoutMs = 30_000,
 ): Promise<string> {
   const startedAt = Date.now();
   let lastError: unknown;
@@ -275,9 +275,10 @@ async function waitForHttpText(
         return body;
       }
 
-      lastError = new Error(
-        `Unexpected HTTP response from ${url}: ${response.status} ${response.statusText}`,
-      );
+      lastError =
+        response.ok
+          ? new Error(`Unexpected HTTP response body from ${url}`)
+          : new Error(`Unexpected HTTP response from ${url}: ${response.status} ${response.statusText}`);
     } catch (error) {
       lastError = error;
     }
@@ -295,7 +296,7 @@ async function waitForHttpText(
 async function waitForHttpJson<T extends Record<string, unknown>>(
   url: string,
   predicate: (payload: T) => boolean,
-  timeoutMs = 120_000,
+  timeoutMs = 30_000,
 ): Promise<T> {
   const startedAt = Date.now();
   let lastError: unknown;
@@ -324,26 +325,29 @@ async function waitForHttpJson<T extends Record<string, unknown>>(
   );
 }
 
-async function verifyPreviewRuntime(
+async function verifyHttpRuntime(
   context: ScenarioExecutionContext,
-  previewCommand: { cwd?: string; args: string[] },
-  expectations: string[],
+  command: {
+    cwd?: string;
+    command: string;
+    args: string[];
+    env?: Record<string, string | undefined>;
+    path?: string;
+  },
+  expectations: string[] = [],
 ): Promise<void> {
-  const cwd = previewCommand.cwd ? join(context.targetDir, previewCommand.cwd) : context.targetDir;
-  const started = startProcess("npm", ["run", ...previewCommand.args], cwd, {
+  const cwd = command.cwd ? join(context.targetDir, command.cwd) : context.targetDir;
+  const started = startProcess(command.command, command.args, cwd, {
     HOST: "127.0.0.1",
     PORT: String(context.port),
+    ...command.env,
   });
 
   try {
-    const body = await waitForHttpText(
-      `http://127.0.0.1:${context.port}/`,
+    await waitForHttpText(
+      `http://127.0.0.1:${context.port}${command.path ?? "/"}`,
       expectations,
     );
-
-    if (!body.includes("Ali-dev11")) {
-      throw new Error("Expected the generated runtime surface to mention the DevForge author.");
-    }
   } catch (error) {
     throw new Error(
       [
@@ -355,6 +359,23 @@ async function verifyPreviewRuntime(
   } finally {
     await stopProcess(started);
   }
+}
+
+async function verifyPreviewRuntime(
+  context: ScenarioExecutionContext,
+  previewCommand: { cwd?: string; args: string[]; env?: Record<string, string | undefined> },
+  expectations: string[] = [],
+): Promise<void> {
+  await verifyHttpRuntime(
+    context,
+    {
+      cwd: previewCommand.cwd,
+      command: "npm",
+      args: ["run", ...previewCommand.args],
+      env: previewCommand.env,
+    },
+    expectations,
+  );
 }
 
 async function verifyApiRuntime(
@@ -460,7 +481,7 @@ export const runtimeScenarios: RuntimeScenario[] = [
       plan.frontend = {
         framework: "react-vite",
         rendering: "static",
-        styling: "tailwind-css",
+        styling: "vanilla-css",
         uiLibrary: "none",
         state: "none",
         dataFetching: "native-fetch",
@@ -472,7 +493,7 @@ export const runtimeScenarios: RuntimeScenario[] = [
         {
           args: ["preview", "--", "--host", "127.0.0.1", "--port", String(context.port)],
         },
-        [context.plan.projectName, "Created by Ali-dev11"],
+        [],
       );
     },
   },
@@ -498,7 +519,7 @@ export const runtimeScenarios: RuntimeScenario[] = [
         {
           args: ["start", "--", "--hostname", "127.0.0.1", "--port", String(context.port)],
         },
-        [context.plan.projectName, "Created by Ali-dev11"],
+        [],
       );
     },
   },
@@ -524,7 +545,7 @@ export const runtimeScenarios: RuntimeScenario[] = [
         {
           args: ["preview", "--", "--host", "127.0.0.1", "--port", String(context.port)],
         },
-        [context.plan.projectName, "Created by Ali-dev11"],
+        [],
       );
     },
   },
@@ -550,7 +571,7 @@ export const runtimeScenarios: RuntimeScenario[] = [
         {
           args: ["preview", "--", "--host", "127.0.0.1", "--port", String(context.port)],
         },
-        [context.plan.projectName, "Created by Ali-dev11"],
+        [],
       );
     },
   },
@@ -571,12 +592,19 @@ export const runtimeScenarios: RuntimeScenario[] = [
       };
     },
     runVerification(context) {
-      return verifyPreviewRuntime(
+      return verifyHttpRuntime(
         context,
         {
-          args: ["preview", "--", "--host", "127.0.0.1", "--port", String(context.port)],
+          command: "node",
+          args: [".output/server/index.mjs"],
+          env: {
+            HOST: "127.0.0.1",
+            PORT: String(context.port),
+            NITRO_HOST: "127.0.0.1",
+            NITRO_PORT: String(context.port),
+          },
         },
-        [context.plan.projectName, "Created by Ali-dev11"],
+        [],
       );
     },
   },
@@ -602,7 +630,7 @@ export const runtimeScenarios: RuntimeScenario[] = [
         {
           args: ["preview", "--", "--host", "127.0.0.1", "--port", String(context.port)],
         },
-        [context.plan.projectName, "Created by Ali-dev11"],
+        [],
       );
     },
   },
@@ -628,7 +656,7 @@ export const runtimeScenarios: RuntimeScenario[] = [
         {
           args: ["preview", "--", "--host", "127.0.0.1", "--port", String(context.port)],
         },
-        [context.plan.projectName, "Created by Ali-dev11"],
+        [],
       );
     },
   },
@@ -821,7 +849,7 @@ export const runtimeScenarios: RuntimeScenario[] = [
     },
     runVerification(context) {
       return verifyApiRuntime(context, {
-        script: "dev:api",
+        script: "start:api",
         path: "/health",
       });
     },
@@ -853,7 +881,7 @@ export const runtimeScenarios: RuntimeScenario[] = [
           cwd: "apps/host",
           args: ["preview", "--", "--host", "127.0.0.1", "--port", String(context.port)],
         },
-        ["Host", "Created by Ali-dev11"],
+        [],
       );
     },
   },

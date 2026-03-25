@@ -75,8 +75,10 @@ test("fullstack scripts honor the selected package manager", () => {
 
   const files = buildProjectFiles(plan, environment);
   const packageJsonFile = files.find((file) => file.path === "package.json");
+  const serverTsconfigFile = files.find((file) => file.path === "tsconfig.server.json");
 
   assert.ok(packageJsonFile);
+  assert.ok(serverTsconfigFile);
 
   const packageJson = JSON.parse(packageJsonFile.content) as {
     scripts: Record<string, string>;
@@ -90,6 +92,9 @@ test("fullstack scripts honor the selected package manager", () => {
     packageJson.scripts.build,
     "pnpm run build:web && pnpm run build:api",
   );
+  assert.equal(packageJson.scripts["build:api"], "tsc -p tsconfig.server.json");
+  assert.equal(packageJson.scripts["start:api"], "node dist-api/src/server.js");
+  assert.match(serverTsconfigFile.content, /"dist-api"/);
 });
 
 test("workspace scaffolds local tsconfig files, app tests, and root tooling dependencies", () => {
@@ -195,6 +200,75 @@ test("backend, cli, and extension scaffolds expose project metadata surfaces", (
   assert.match(popupFile.content, /Extension details/);
   assert.match(popupFile.content, /Created by Ali-dev11 via @ali-dev11\/devforge/);
   assert.match(backgroundFile.content, /extensionInfo/);
+});
+
+test("nextjs scaffolds include next type support and css-safe typecheck setup", () => {
+  const plan = buildDefaultPlan(environment, cliOptions);
+  plan.frontend = {
+    framework: "nextjs",
+    rendering: "ssr",
+    styling: "vanilla-css",
+    uiLibrary: "none",
+    state: "none",
+    dataFetching: "native-fetch",
+  };
+
+  const files = buildProjectFiles(plan, environment);
+  const tsconfigFile = files.find((file) => file.path === "tsconfig.json");
+  const nextEnvFile = files.find((file) => file.path === "next-env.d.ts");
+
+  assert.ok(tsconfigFile);
+  assert.ok(nextEnvFile);
+  assert.match(tsconfigFile.content, /"next-env\.d\.ts"/);
+  assert.match(tsconfigFile.content, /"name": "next"/);
+  assert.match(nextEnvFile.content, /reference types="next"/);
+});
+
+test("nestjs and javascript backend scaffolds include compatible build settings", () => {
+  const nestPlan = buildDefaultPlan(environment, cliOptions);
+  nestPlan.intent = "backend-api";
+  applyIntentDefaults(nestPlan);
+  nestPlan.backend = {
+    framework: "nestjs",
+    language: "typescript",
+    adapter: "express",
+    auth: [],
+    orm: "none",
+    database: "none",
+    redis: false,
+    swagger: false,
+    websockets: false,
+  };
+
+  const nestFiles = buildProjectFiles(nestPlan, environment);
+  const nestTsconfig = nestFiles.find((file) => file.path === "tsconfig.json");
+
+  assert.ok(nestTsconfig);
+  assert.match(nestTsconfig.content, /"experimentalDecorators": true/);
+  assert.match(nestTsconfig.content, /"emitDecoratorMetadata": true/);
+
+  const jsBackendPlan = buildDefaultPlan(environment, cliOptions);
+  jsBackendPlan.intent = "backend-api";
+  applyIntentDefaults(jsBackendPlan);
+  jsBackendPlan.backend = {
+    framework: "koa",
+    language: "javascript",
+    auth: [],
+    orm: "none",
+    database: "none",
+    redis: false,
+    swagger: false,
+    websockets: false,
+  };
+
+  const jsBackendFiles = buildProjectFiles(jsBackendPlan, environment);
+  const jsPackageJsonFile = jsBackendFiles.find((file) => file.path === "package.json");
+
+  assert.ok(jsPackageJsonFile);
+  const jsPackageJson = JSON.parse(jsPackageJsonFile.content) as {
+    scripts: Record<string, string>;
+  };
+  assert.match(jsPackageJson.scripts.build, /does not require compilation/);
 });
 
 test("all intents emit a primary starter surface", () => {

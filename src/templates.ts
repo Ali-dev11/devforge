@@ -61,6 +61,10 @@ function usesTypeScript(plan: ProjectPlan): boolean {
   return true;
 }
 
+function backendUsesTypeScript(plan: ProjectPlan): boolean {
+  return plan.backend?.language !== "javascript";
+}
+
 function nodeVersionSpec(plan: ProjectPlan): string {
   if (plan.nodeStrategy === "custom" && plan.customNodeVersion) {
     return plan.customNodeVersion;
@@ -148,44 +152,123 @@ function rootGitignore(): string {
   ].join("\n");
 }
 
-function rootTsConfig(): string {
+function isNextJsPlan(plan: ProjectPlan): boolean {
+  return plan.frontend?.framework === "nextjs";
+}
+
+function isBrowserLikePlan(plan: ProjectPlan): boolean {
+  return Boolean(plan.frontend) || plan.intent === "chrome-extension";
+}
+
+function nodeTsConfig(
+  plan: ProjectPlan,
+  include: string[],
+  options?: { outDir?: string; rootDir?: string },
+): string {
+  const compilerOptions: Record<string, unknown> = {
+    target: "ES2022",
+    module: "NodeNext",
+    moduleResolution: "NodeNext",
+    types: ["node"],
+    strict: true,
+    skipLibCheck: true,
+    esModuleInterop: true,
+    forceConsistentCasingInFileNames: true,
+    resolveJsonModule: true,
+    outDir: options?.outDir ?? "dist",
+    rootDir: options?.rootDir ?? ".",
+  };
+
+  if (plan.backend?.framework === "nestjs") {
+    compilerOptions.experimentalDecorators = true;
+    compilerOptions.emitDecoratorMetadata = true;
+  }
+
   return stringifyJson({
-    compilerOptions: {
-      target: "ES2022",
-      module: "NodeNext",
-      moduleResolution: "NodeNext",
-      types: ["node"],
-      strict: true,
-      skipLibCheck: true,
-      esModuleInterop: true,
-      forceConsistentCasingInFileNames: true,
-      resolveJsonModule: true,
-      outDir: "dist",
-      rootDir: ".",
-      jsx: "react-jsx",
-    },
-    include: ["src", "app", "apps", "packages"],
+    compilerOptions,
+    include,
   });
 }
 
-function localTsConfig(include: string[] = ["src", "app", "tests", "cypress"]): string {
+function browserTsConfig(plan: ProjectPlan, include: string[]): string {
+  const compilerOptions: Record<string, unknown> = {
+    target: "ES2022",
+    module: "ESNext",
+    moduleResolution: "Bundler",
+    lib: ["ES2022", "DOM", "DOM.Iterable"],
+    types: plan.intent === "chrome-extension" ? ["chrome", "node"] : ["node"],
+    strict: true,
+    skipLibCheck: true,
+    esModuleInterop: true,
+    forceConsistentCasingInFileNames: true,
+    resolveJsonModule: true,
+    noEmit: true,
+    isolatedModules: true,
+  };
+
+  if (
+    plan.frontend?.framework === "react-vite" ||
+    plan.frontend?.framework === "remix" ||
+    (plan.intent === "chrome-extension" && plan.extension?.flavor === "react")
+  ) {
+    compilerOptions.jsx = "react-jsx";
+  }
+
+  if (plan.frontend?.framework === "solidjs") {
+    compilerOptions.jsx = "preserve";
+    compilerOptions.jsxImportSource = "solid-js";
+  }
+
+  return stringifyJson({
+    compilerOptions,
+    include,
+  });
+}
+
+function nextTsConfig(): string {
   return stringifyJson({
     compilerOptions: {
       target: "ES2022",
-      module: "NodeNext",
-      moduleResolution: "NodeNext",
-      types: ["node"],
-      strict: true,
+      lib: ["DOM", "DOM.Iterable", "ESNext"],
+      allowJs: true,
       skipLibCheck: true,
+      strict: true,
+      noEmit: true,
       esModuleInterop: true,
-      forceConsistentCasingInFileNames: true,
+      module: "ESNext",
+      moduleResolution: "Bundler",
       resolveJsonModule: true,
-      outDir: "dist",
-      rootDir: ".",
-      jsx: "react-jsx",
+      isolatedModules: true,
+      jsx: "preserve",
+      incremental: true,
+      plugins: [{ name: "next" }],
     },
-    include,
+    include: ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+    exclude: ["node_modules"],
   });
+}
+
+function rootTsConfig(plan: ProjectPlan): string {
+  if (isNextJsPlan(plan)) {
+    return nextTsConfig();
+  }
+
+  if (isBrowserLikePlan(plan)) {
+    return browserTsConfig(plan, ["src", "app", "**/*.d.ts"]);
+  }
+
+  return nodeTsConfig(plan, ["src", "app", "apps", "packages", "**/*.d.ts"]);
+}
+
+function localTsConfig(
+  plan: ProjectPlan,
+  include: string[] = ["src", "app", "tests", "cypress", "**/*.d.ts"],
+): string {
+  if (isBrowserLikePlan(plan)) {
+    return browserTsConfig(plan, include);
+  }
+
+  return nodeTsConfig(plan, include);
 }
 
 function generatedProjectVersion(): string {
@@ -194,6 +277,10 @@ function generatedProjectVersion(): string {
 
 function generatedWithText(): string {
   return `Created by ${DEVFORGE_AUTHOR} via ${DEVFORGE_PACKAGE_NAME} v${DEVFORGE_VERSION}`;
+}
+
+function viteEnvTypesFile(): GeneratedFile {
+  return makeFile("src/vite-env.d.ts", '/// <reference types="vite/client" />\n');
 }
 
 function projectDetailsEntries(
@@ -1178,6 +1265,7 @@ function singlePackageScripts(plan: ProjectPlan): Record<string, string> {
             }
           : {
               dev: "node --watch src/server.js",
+              build: "node --eval \"console.log('JavaScript API does not require compilation')\"",
               start: "node src/server.js",
             },
       );
@@ -1193,14 +1281,17 @@ function singlePackageScripts(plan: ProjectPlan): Record<string, string> {
         addRecord(scripts, {
           dev: `concurrently -n web,api "${packageManagerRunCommand(plan.packageManager, "dev:web")}" "${packageManagerRunCommand(plan.packageManager, "dev:api")}"`,
           "dev:web": "vite",
-          "dev:api": usesTypeScript(plan)
+          "dev:api": backendUsesTypeScript(plan)
             ? "tsx watch src/server.ts"
             : "node --watch src/server.js",
           build: `${packageManagerRunCommand(plan.packageManager, "build:web")} && ${packageManagerRunCommand(plan.packageManager, "build:api")}`,
           "build:web": "vite build",
-          "build:api": usesTypeScript(plan)
-            ? "tsc -p tsconfig.json"
+          "build:api": backendUsesTypeScript(plan)
+            ? "tsc -p tsconfig.server.json"
             : "echo \"JavaScript API does not require compilation\"",
+          "start:api": backendUsesTypeScript(plan)
+            ? "node dist-api/src/server.js"
+            : "node src/server.js",
         });
       }
       break;
@@ -1317,6 +1408,7 @@ function reactAppSource(plan: ProjectPlan, context?: FrontendSurfaceContext): Ge
   const surface = frontendSurfaceDetails(plan, context);
 
   const files: GeneratedFile[] = [
+    viteEnvTypesFile(),
     makeFile(
       "index.html",
       [
@@ -1436,6 +1528,14 @@ function reactAppSource(plan: ProjectPlan, context?: FrontendSurfaceContext): Ge
 function nextJsSource(plan: ProjectPlan, context?: FrontendSurfaceContext): GeneratedFile[] {
   const surface = frontendSurfaceDetails(plan, context);
   return [
+    makeFile(
+      "next-env.d.ts",
+      [
+        "/// <reference types=\"next\" />",
+        "/// <reference types=\"next/image-types/global\" />",
+        "",
+      ].join("\n"),
+    ),
     makeFile(
       "next.config.ts",
       [
@@ -1570,6 +1670,7 @@ function astroSource(plan: ProjectPlan, context?: FrontendSurfaceContext): Gener
 function vueSource(plan: ProjectPlan, context?: FrontendSurfaceContext): GeneratedFile[] {
   const surface = frontendSurfaceDetails(plan, context);
   return [
+    viteEnvTypesFile(),
     makeFile(
       "index.html",
       [
@@ -1707,6 +1808,7 @@ function nuxtSource(plan: ProjectPlan, context?: FrontendSurfaceContext): Genera
 function svelteSource(plan: ProjectPlan, context?: FrontendSurfaceContext): GeneratedFile[] {
   const surface = frontendSurfaceDetails(plan, context);
   return [
+    viteEnvTypesFile(),
     makeFile(
       "index.html",
       [
@@ -1827,6 +1929,7 @@ function svelteKitSource(plan: ProjectPlan, context?: FrontendSurfaceContext): G
 function solidSource(plan: ProjectPlan, context?: FrontendSurfaceContext): GeneratedFile[] {
   const surface = frontendSurfaceDetails(plan, context);
   return [
+    viteEnvTypesFile(),
     makeFile(
       "index.html",
       [
@@ -2756,7 +2859,7 @@ function toolingFiles(plan: ProjectPlan, options?: { includeTesting?: boolean })
   ];
 
   if (usesTypeScript(plan)) {
-    files.push(makeFile("tsconfig.json", rootTsConfig()));
+    files.push(makeFile("tsconfig.json", rootTsConfig(plan)));
   }
 
   if (plan.tooling.eslint) {
@@ -2846,7 +2949,20 @@ function fullstackExtras(plan: ProjectPlan): GeneratedFile[] {
     ];
   }
 
-  return backendFiles(plan);
+  return [
+    ...(backendUsesTypeScript(plan)
+      ? [
+          makeFile(
+            "tsconfig.server.json",
+            nodeTsConfig(plan, ["src/server.ts", "**/*.d.ts"], {
+              outDir: "dist-api",
+              rootDir: ".",
+            }),
+          ),
+        ]
+      : []),
+    ...backendFiles(plan),
+  ];
 }
 
 function prefixFiles(prefix: string, files: GeneratedFile[]): GeneratedFile[] {
@@ -3025,7 +3141,7 @@ function workspaceFiles(
       ),
     );
     if (usesTypeScript(webPlan)) {
-      files.push(makeFile("apps/web/tsconfig.json", localTsConfig()));
+      files.push(makeFile("apps/web/tsconfig.json", localTsConfig(webPlan)));
     }
     files.push(...prefixFiles("apps/web", testingFiles(webPlan)));
     files.push(...prefixFiles("apps/web", frontendFiles(webPlan)));
@@ -3061,7 +3177,12 @@ function workspaceFiles(
       ),
     );
     if (usesTypeScript(apiPlan)) {
-      files.push(makeFile("apps/api/tsconfig.json", localTsConfig(["src", "tests", "cypress"])));
+      files.push(
+        makeFile(
+          "apps/api/tsconfig.json",
+          localTsConfig(apiPlan, ["src", "tests", "cypress", "**/*.d.ts"]),
+        ),
+      );
     }
     files.push(...prefixFiles("apps/api", testingFiles(apiPlan)));
     files.push(...prefixFiles("apps/api", backendFiles(apiPlan)));
@@ -3151,7 +3272,7 @@ function microfrontendFiles(
     ),
   );
   if (usesTypeScript(hostPlan)) {
-    files.push(makeFile("apps/host/tsconfig.json", localTsConfig()));
+    files.push(makeFile("apps/host/tsconfig.json", localTsConfig(hostPlan)));
   }
   files.push(...prefixFiles("apps/host", testingFiles(hostPlan)));
   files.push(
@@ -3199,7 +3320,12 @@ function microfrontendFiles(
     );
 
     if (usesTypeScript(remotePlan)) {
-      files.push(makeFile(`apps/remote-${remoteApp}/tsconfig.json`, localTsConfig()));
+      files.push(
+        makeFile(
+          `apps/remote-${remoteApp}/tsconfig.json`,
+          localTsConfig(remotePlan),
+        ),
+      );
     }
     files.push(...prefixFiles(`apps/remote-${remoteApp}`, testingFiles(remotePlan)));
     files.push(

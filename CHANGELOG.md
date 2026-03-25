@@ -24,6 +24,12 @@ The format follows Keep a Changelog and the version numbers follow Semantic Vers
 - Added Node compatibility warnings when users choose a custom Node version that is too old for the selected frontend-oriented scaffold.
 - Added Node type definitions to generated TypeScript configs so backend, fullstack, and CLI projects build cleanly when they reference `process`.
 - Tightened the runtime verifier so CLI JSON checks execute the built binary directly instead of parsing npm wrapper output.
+- Fixed generated Next.js projects to include Next-specific type declarations and tsconfig settings so app-directory CSS imports typecheck during production builds.
+- Fixed generated fullstack React plus API projects to compile server code through a dedicated server tsconfig instead of typechecking browser entrypoints with NodeNext emit settings.
+- Fixed generated NestJS projects to enable decorator compiler options required for controller methods.
+- Added a no-op build script for JavaScript backend scaffolds so install/build/run verification stays consistent across backend language choices.
+- Relaxed frontend runtime probes to validate successful startup instead of waiting for client-rendered HTML content that only appears after hydration.
+- Fixed Nuxt runtime verification to start the built Nitro server directly instead of passing unsupported preview arguments.
 
 ## [0.2.3] - 2026-03-25
 
