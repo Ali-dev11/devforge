@@ -6,6 +6,12 @@ The format follows Keep a Changelog and the version numbers follow Semantic Vers
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-03-26
+
+### Fixed
+
+- Hardened generated runtime-matrix process shutdown by terminating the full spawned process group for preview and start commands, which prevents Linux CI jobs from lingering after verification logs show completion.
+
 ## [0.3.1] - 2026-03-26
 
 ### Changed

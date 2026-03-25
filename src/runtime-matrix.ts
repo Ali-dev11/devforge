@@ -211,6 +211,7 @@ function startProcess(
 ): StartedProcess {
   const child = spawn(command, args, {
     cwd,
+    detached: process.platform !== "win32",
     env: {
       ...process.env,
       ...env,
@@ -241,21 +242,62 @@ function startProcess(
   };
 }
 
+function killStartedProcess(processRef: StartedProcess, signal: NodeJS.Signals): void {
+  const pid = processRef.child.pid;
+  if (!pid) {
+    return;
+  }
+
+  if (process.platform !== "win32") {
+    try {
+      process.kill(-pid, signal);
+      return;
+    } catch {
+      // Fall back to killing the direct child if the process group is already gone.
+    }
+  }
+
+  try {
+    processRef.child.kill(signal);
+  } catch {
+    // Ignore kill errors when the process is already exiting.
+  }
+}
+
+async function waitForProcessExit(processRef: StartedProcess, timeoutMs: number): Promise<boolean> {
+  if (processRef.child.exitCode !== null || processRef.child.killed) {
+    return true;
+  }
+
+  return new Promise<boolean>((resolve) => {
+    const onExit = (): void => {
+      clearTimeout(timer);
+      resolve(true);
+    };
+
+    const timer = setTimeout(() => {
+      processRef.child.off("exit", onExit);
+      resolve(false);
+    }, timeoutMs);
+
+    processRef.child.once("exit", onExit);
+  });
+}
+
 async function stopProcess(processRef: StartedProcess): Promise<void> {
   if (processRef.child.exitCode !== null || processRef.child.killed) {
     return;
   }
 
-  processRef.child.kill("SIGTERM");
+  killStartedProcess(processRef, "SIGTERM");
 
-  await Promise.race([
-    new Promise<void>((resolve) => {
-      processRef.child.once("exit", () => resolve());
-    }),
-    delay(5_000).then(() => {
-      processRef.child.kill("SIGKILL");
-    }),
-  ]);
+  const exitedAfterTerminate = await waitForProcessExit(processRef, 5_000);
+  if (exitedAfterTerminate) {
+    return;
+  }
+
+  killStartedProcess(processRef, "SIGKILL");
+  await waitForProcessExit(processRef, 5_000);
 }
 
 async function waitForHttpText(
