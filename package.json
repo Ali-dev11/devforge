@@ -1,6 +1,6 @@
 {
-  "name": "@ali-dev11/create-devforge",
-  "version": "0.1.1",
+  "name": "@ali-dev11/devforge",
+  "version": "0.2.0",
   "description": "Production-focused AI-native project scaffolding CLI for JavaScript and TypeScript teams.",
   "license": "MIT",
   "author": "Ali-dev11",

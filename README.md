@@ -14,13 +14,13 @@ DevForge CLI is a production-focused, AI-native scaffolding tool for modern Java
 ## Usage
 
 ```bash
-npx @ali-dev11/create-devforge@latest
+npx @ali-dev11/devforge@latest
 ```
 
 Global install:
 
 ```bash
-npm install -g @ali-dev11/create-devforge
+npm install -g @ali-dev11/devforge
 create-devforge
 # or
 devforge

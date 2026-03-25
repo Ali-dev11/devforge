@@ -6,7 +6,7 @@ The format follows Keep a Changelog and the version numbers follow Semantic Vers
 
 ## [Unreleased]
 
-## [0.1.1] - 2026-03-25
+## [0.2.0] - 2026-03-25
 
 ### Fixed
 
@@ -16,7 +16,8 @@ The format follows Keep a Changelog and the version numbers follow Semantic Vers
 
 ### Changed
 
-- Moved the npm package to the scoped public name `@ali-dev11/create-devforge`.
+- Renamed the npm package to `@ali-dev11/devforge`.
+- Updated user-facing install and CLI examples to use the shorter package name.
 - Added release scripts for patch, minor, and major version bumps with pre-release validation.
 
 ## [0.1.0] - 2026-03-25

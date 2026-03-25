@@ -83,8 +83,8 @@ function printHelp(): void {
   console.log(`DevForge CLI v${DEVFORGE_VERSION}
 
 Usage:
-  create-devforge
-  create-devforge init
+  devforge
+  devforge init
   devforge init --resume
 
 Commands:
@@ -102,8 +102,8 @@ Flags:
   --version, -v    Show the current CLI version
 
 Examples:
-  npx create-devforge
-  npx create-devforge init --yes --skip-install --output ./my-app
+  npx @ali-dev11/devforge@latest
+  npx @ali-dev11/devforge@latest init --yes --skip-install --output ./my-app
   devforge init --resume
 `);
 }
