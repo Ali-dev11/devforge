@@ -32,12 +32,6 @@ npm run check
 npm run smoke
 ```
 
-## GitHub Pages Docs
-
-GitHub Pages setup guide: [docs/github-pages.md](./docs/github-pages.md)
-
-This repository includes a Pages-ready `docs/` directory, a docs index page, Jekyll config, and a deployment workflow so the documentation site can publish cleanly from the repository.
-
 ## Documentation
 
 - [Docs Home](./docs/index.md)
@@ -45,7 +39,6 @@ This repository includes a Pages-ready `docs/` directory, a docs index page, Jek
 - [Architecture](./docs/architecture.md)
 - [Development](./docs/development.md)
 - [Generated Output](./docs/generated-output.md)
-- [GitHub Pages Setup](./docs/github-pages.md)
 - [Contributing](./CONTRIBUTING.md)
 - [Docs Contributing Page](./docs/contributing.md)
 
@@ -67,18 +60,8 @@ This repository includes a Pages-ready `docs/` directory, a docs index page, Jek
 - `src/templates.ts`: generated file content and project docs
 - `src/devforge-rules.ts`: DevForge-curated AI rule pack mapping
 - `test/`: regression tests
-- `docs/`: product, architecture, Pages, and contribution documentation
+- `docs/`: product, architecture, and contribution documentation
 
 ## License
 
 [MIT](./LICENSE)
-
-## Repository Metadata
-
-This repository is configured for:
-
-- GitHub owner: `Ali-dev11`
-- repository URL: `https://github.com/Ali-dev11/devforge`
-- GitHub Pages URL: `https://ali-dev11.github.io/devforge/`
-
-If you use a different repository name later, update the URLs in `package.json` and `docs/github-pages.md`.

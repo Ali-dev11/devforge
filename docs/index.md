@@ -12,7 +12,6 @@ Welcome to the DevForge CLI documentation site.
 - [Architecture](./architecture.md)
 - [Development](./development.md)
 - [Generated Output](./generated-output.md)
-- [GitHub Pages Setup](./github-pages.md)
 - [Contributing](./contributing.md)
 
 ## Project Links
