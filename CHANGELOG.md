@@ -6,6 +6,14 @@ The format follows Keep a Changelog and the version numbers follow Semantic Vers
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-03-25
+
+### Fixed
+
+- Made AI rule category prompts stack-aware so frontend-only flows no longer offer backend rules.
+- Filtered invalid AI rule categories out of normalized plans for resume, seed, and compatibility-adjusted flows.
+- Added regression coverage for rule-category availability across landing page, chrome extension, and other intent-specific paths.
+
 ## [0.2.0] - 2026-03-25
 
 ### Fixed
