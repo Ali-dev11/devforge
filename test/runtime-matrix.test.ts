@@ -24,3 +24,11 @@ test("runtime scenarios are uniquely named", () => {
 
   assert.equal(new Set(names).size, names.length);
 });
+
+test("runtime matrix includes the Bun and Remix verification path", () => {
+  const remixScenario = runtimeScenarios.find((scenario) => scenario.name === "frontend-remix-bun");
+
+  assert.ok(remixScenario);
+  assert.equal(remixScenario.intent, "frontend-app");
+  assert.equal(remixScenario.frontendFramework, "remix");
+});

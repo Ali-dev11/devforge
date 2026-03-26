@@ -34,7 +34,7 @@ jobs:
       matrix:
         group:
           - name: frontend-core
-            args: --scenario landing-react-vite --scenario frontend-nextjs --scenario frontend-astro
+            args: --scenario landing-react-vite --scenario frontend-nextjs --scenario frontend-astro --scenario frontend-remix-bun
           - name: frontend-apps
             args: --scenario frontend-vue-vite --scenario frontend-nuxt --scenario frontend-svelte --scenario frontend-solidjs
           - name: backends
@@ -45,6 +45,9 @@ jobs:
             args: --scenario chrome-extension-react --scenario chrome-extension-vanilla-ts --scenario cli-tool
     steps:
       - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
       - uses: actions/setup-node@v6
         with:
           node-version: "22.12.0"

@@ -11,6 +11,14 @@ import {
   getRecommendedRuleCategories,
   getArchitectureChoicesForIntent,
 } from "../src/engines/prompts.js";
+import {
+  getSupportedBackendLanguages,
+  getSupportedDataFetchingChoicesForState,
+  getSupportedFrontendFrameworks,
+  getSupportedPackageManagers,
+  getSupportedRenderingModes,
+  getSupportedTestRunners,
+} from "../src/guidance.js";
 import type { CliOptions, EnvironmentInfo } from "../src/types.js";
 
 const environment: EnvironmentInfo = {
@@ -119,6 +127,10 @@ test("intent defaults hydrate backend plans and drop frontend-only state", () =>
 
 test("architecture choices stay compatible with project intent", () => {
   assert.deepEqual(
+    getArchitectureChoicesForIntent("frontend-app").map((choice) => choice.value),
+    ["simple", "modular", "monorepo"],
+  );
+  assert.deepEqual(
     getArchitectureChoicesForIntent("backend-api").map((choice) => choice.value),
     ["simple", "modular", "monorepo"],
   );
@@ -150,7 +162,7 @@ test("nestjs javascript selections normalize back to typescript", () => {
   const result = normalizeProjectPlan(plan, environment);
 
   assert.equal(result.plan.backend?.language, "typescript");
-  assert.match(result.warnings.join(" "), /NestJS is generated as a TypeScript-first stack/);
+  assert.match(result.warnings.join(" "), /switching backend language to TypeScript|generated as a typescript stack/i);
 });
 
 test("frontend-only intents expose only applicable AI rule categories", () => {
@@ -274,4 +286,101 @@ test("drizzle with mongodb normalizes to a supported backend setup", () => {
   assert.equal(result.plan.backend?.database, "mongodb");
   assert.equal(result.plan.backend?.orm, "none");
   assert.match(result.warnings.join(" "), /Drizzle ORM does not support MongoDB/i);
+});
+
+test("bun is only offered for verified stack paths", () => {
+  assert.deepEqual(getSupportedPackageManagers("frontend-app", "simple"), [
+    "npm",
+    "pnpm",
+    "yarn",
+    "bun",
+  ]);
+  assert.deepEqual(getSupportedPackageManagers("backend-api", "simple"), [
+    "npm",
+    "pnpm",
+    "yarn",
+  ]);
+  assert.deepEqual(getSupportedPackageManagers("microfrontend-system", "microfrontend"), [
+    "npm",
+    "pnpm",
+    "yarn",
+  ]);
+  assert.deepEqual(getSupportedFrontendFrameworks("bun", "simple"), [
+    "react-vite",
+    "astro",
+    "remix",
+    "vue-vite",
+    "svelte",
+    "solidjs",
+  ]);
+});
+
+test("remix rendering stays on supported modes", () => {
+  assert.deepEqual(getSupportedRenderingModes("remix", "simple"), ["ssr"]);
+
+  const plan = buildDefaultPlan(environment, cliOptions);
+  plan.packageManager = "bun";
+  plan.frontend = {
+    framework: "remix",
+    rendering: "isr",
+    styling: "tailwind-css",
+    uiLibrary: "chakra-ui",
+    state: "jotai",
+    dataFetching: "apollo-client",
+  };
+
+  const result = normalizeProjectPlan(plan, environment);
+
+  assert.equal(result.plan.frontend?.framework, "remix");
+  assert.equal(result.plan.frontend?.rendering, "ssr");
+  assert.match(result.warnings.join(" "), /does not support isr rendering/i);
+});
+
+test("normalization moves unsupported bun framework selections onto a verified package manager", () => {
+  const plan = buildDefaultPlan(environment, cliOptions);
+  plan.packageManager = "bun";
+  plan.frontend = {
+    framework: "nextjs",
+    rendering: "ssr",
+    styling: "vanilla-css",
+    uiLibrary: "none",
+    state: "none",
+    dataFetching: "native-fetch",
+  };
+
+  const result = normalizeProjectPlan(plan, environment);
+
+  assert.equal(result.plan.frontend?.framework, "nextjs");
+  assert.notEqual(result.plan.packageManager, "bun");
+  assert.match(result.warnings.join(" "), /not currently verified for nextjs/i);
+});
+
+test("browser e2e runners only appear on supported stacks", () => {
+  const backendPlan = buildDefaultPlan(environment, cliOptions);
+  backendPlan.intent = "backend-api";
+  applyIntentDefaults(backendPlan);
+
+  assert.deepEqual(getSupportedTestRunners(backendPlan), ["vitest", "jest"]);
+
+  const extensionPlan = buildDefaultPlan(environment, cliOptions);
+  extensionPlan.intent = "chrome-extension";
+  applyIntentDefaults(extensionPlan);
+
+  assert.deepEqual(getSupportedTestRunners(extensionPlan), ["vitest", "jest"]);
+});
+
+test("backend language choices stay stack-aware", () => {
+  assert.deepEqual(getSupportedBackendLanguages("nestjs"), ["typescript"]);
+  assert.deepEqual(getSupportedBackendLanguages("hono"), ["typescript", "javascript"]);
+});
+
+test("rtk query is only offered when the selected state layer is compatible", () => {
+  assert.deepEqual(
+    getSupportedDataFetchingChoicesForState("react-vite", "frontend-app", "jotai").includes("rtk-query"),
+    false,
+  );
+  assert.deepEqual(
+    getSupportedDataFetchingChoicesForState("react-vite", "frontend-app", "redux-toolkit").includes("rtk-query"),
+    true,
+  );
 });

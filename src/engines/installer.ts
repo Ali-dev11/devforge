@@ -133,14 +133,23 @@ export function runInstallers(
 ): InstallResult {
   const executed: string[] = [];
   const skipped: string[] = [];
+  const dependencyInstall: InstallResult["dependencyInstall"] = {
+    attempted: !skipInstall,
+    succeeded: false,
+    skipped: skipInstall,
+    available: true,
+    command: `${plan.packageManager} install`,
+  };
 
   if (!skipInstall) {
     const invocation = installInvocation(plan.packageManager, environment, plan.targetDir);
+    dependencyInstall.command = invocation.label;
+    dependencyInstall.available = invocation.available;
 
     if (!invocation.available) {
-      skipped.push(
-        `${plan.packageManager} is not installed and Corepack is unavailable; generated project without installing dependencies.`,
-      );
+      dependencyInstall.failureReason =
+        `${plan.packageManager} is not installed and Corepack is unavailable; generated project without installing dependencies.`;
+      skipped.push(dependencyInstall.failureReason);
     } else {
       hooks?.onStep?.(`Installing dependencies with ${invocation.label}`);
       removeIncompatibleLockfiles(plan.targetDir, plan.packageManager);
@@ -153,16 +162,17 @@ export function runInstallers(
 
       if (installResult.ok) {
         executed.push(invocation.label);
+        dependencyInstall.succeeded = true;
       } else {
-        skipped.push(
-          installResult.output
-            ? `${invocation.label} failed: ${installResult.output.split(/\r?\n/)[0]}`
-            : `${invocation.label} failed; dependencies were not installed.`,
-        );
+        dependencyInstall.failureReason = installResult.output
+          ? `${invocation.label} failed: ${installResult.output.split(/\r?\n/)[0]}`
+          : `${invocation.label} failed; dependencies were not installed.`;
+        skipped.push(dependencyInstall.failureReason);
       }
     }
   } else {
     skipped.push("Dependency installation skipped by flag.");
+    dependencyInstall.failureReason = "Dependency installation skipped by flag.";
   }
 
   if (plan.git.initialize) {
@@ -183,5 +193,5 @@ export function runInstallers(
     }
   }
 
-  return { executed, skipped };
+  return { executed, skipped, dependencyInstall };
 }

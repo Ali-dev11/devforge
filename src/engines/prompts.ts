@@ -45,6 +45,19 @@ import type {
 } from "../types.js";
 import { getAvailableRuleCategories } from "./decision.js";
 import { dedupe, slugifyProjectName } from "../utils/strings.js";
+import {
+  chooseSupportedPackageManager,
+  getSupportedBackendLanguages,
+  getSupportedDataFetchingChoicesForState,
+  getDefaultRenderingMode,
+  getSupportedFrontendFrameworks,
+  getSupportedPackageManagers,
+  getSupportedRenderingModes,
+  getSupportedStateChoices,
+  getSupportedStateChoicesForDataFetching,
+  getSupportedTestRunners,
+  getSupportedUiLibraries,
+} from "../guidance.js";
 
 function cancelHandler(): never {
   throw new Error("Prompt cancelled.");
@@ -245,6 +258,13 @@ function withSelected<T extends { title: string; value: string }>(
   }));
 }
 
+function filterChoices<T extends { title: string; value: string }>(
+  choices: T[],
+  allowedValues: string[],
+): T[] {
+  return choices.filter((choice) => allowedValues.includes(choice.value));
+}
+
 function getDatabaseChoicesForBackend(
   backend: BackendConfig,
 ): Array<{ title: string; value: BackendConfig["database"] }> {
@@ -258,6 +278,10 @@ function getDatabaseChoicesForBackend(
 function getOrmChoicesForBackend(
   backend: BackendConfig,
 ): Array<{ title: string; value: BackendConfig["orm"] }> {
+  if (backend.database === "none") {
+    return ORM_CHOICES.filter((choice) => choice.value === "none");
+  }
+
   if (backend.database === "mongodb") {
     return ORM_CHOICES.filter((choice) => choice.value !== "drizzle");
   }
@@ -288,7 +312,13 @@ export function getArchitectureChoicesForIntent(
     return ARCHITECTURE_CHOICES.filter((choice) => choice.value === "modular");
   }
 
-  if (intent === "backend-api" || intent === "cli-tool") {
+  if (
+    intent === "landing-page" ||
+    intent === "frontend-app" ||
+    intent === "backend-api" ||
+    intent === "fullstack-app" ||
+    intent === "cli-tool"
+  ) {
     return ARCHITECTURE_CHOICES.filter((choice) => choice.value !== "microfrontend");
   }
 
@@ -403,16 +433,6 @@ export async function collectProjectPlan(
       },
       {
         type: "select",
-        name: "packageManager",
-        message: "Package manager",
-        choices: PACKAGE_MANAGER_CHOICES.map((choice) => ({
-          title: `${choice.title}${environment.packageManagers[choice.value].installed ? "" : " (not installed)"}`,
-          value: choice.value,
-        })),
-        initial: getInitialChoiceIndex(PACKAGE_MANAGER_CHOICES, base.packageManager),
-      },
-      {
-        type: "select",
         name: "intent",
         message: "What are you building?",
         choices: PROJECT_INTENT_CHOICES,
@@ -424,14 +444,41 @@ export async function collectProjectPlan(
 
   const selectedIntent = setupAnswers.intent ?? base.intent;
   const architectureChoices = getArchitectureChoicesForIntent(selectedIntent);
+  const architectureAnswer: { architecture?: ArchitectureMode } =
+    architectureChoices.length > 1
+      ? await prompts(
+          [
+            {
+              type: "select",
+              name: "architecture",
+              message: "Architecture style",
+              choices: architectureChoices,
+              initial: getInitialChoiceIndex(architectureChoices, base.architecture),
+            },
+          ],
+          { onCancel: cancelHandler },
+        )
+      : {};
+  const selectedArchitecture =
+    architectureAnswer.architecture ?? architectureChoices[0]?.value ?? base.architecture;
+  const availablePackageManagerChoices = filterChoices(
+    PACKAGE_MANAGER_CHOICES,
+    getSupportedPackageManagers(
+      selectedIntent,
+      selectedArchitecture,
+    ),
+  );
   const setupDetailsAnswers = await prompts(
     [
       {
-        type: architectureChoices.length > 1 ? "select" : null,
-        name: "architecture",
-        message: "Architecture style",
-        choices: architectureChoices,
-        initial: getInitialChoiceIndex(architectureChoices, base.architecture),
+        type: availablePackageManagerChoices.length > 1 ? "select" : null,
+        name: "packageManager",
+        message: "Package manager",
+        choices: availablePackageManagerChoices.map((choice) => ({
+          title: `${choice.title}${environment.packageManagers[choice.value].installed ? "" : " (not installed)"}`,
+          value: choice.value,
+        })),
+        initial: getInitialChoiceIndex(availablePackageManagerChoices, base.packageManager),
       },
       {
         type: "select",
@@ -475,10 +522,18 @@ export async function collectProjectPlan(
     targetDir,
     nodeStrategy: setupAnswers.nodeStrategy ?? base.nodeStrategy,
     customNodeVersion: setupAnswers.customNodeVersion ?? base.customNodeVersion,
-    packageManager: setupAnswers.packageManager ?? base.packageManager,
+    packageManager:
+      setupDetailsAnswers.packageManager ??
+      chooseSupportedPackageManager(
+        {
+          ...base,
+          intent: selectedIntent,
+          architecture: selectedArchitecture,
+        },
+        environment,
+      ),
     intent: selectedIntent,
-    architecture:
-      setupDetailsAnswers.architecture ?? architectureChoices[0]?.value ?? base.architecture,
+    architecture: selectedArchitecture,
     templateTier: setupDetailsAnswers.templateTier ?? base.templateTier,
     metadata: {
       ...base.metadata,
@@ -490,15 +545,12 @@ export async function collectProjectPlan(
 
   if (needsFrontend(plan.intent)) {
     const availableFrontendFrameworkChoices =
-      plan.architecture === "microfrontend"
-        ? FRONTEND_FRAMEWORK_CHOICES.filter((choice) => choice.value === "react-vite")
-        : FRONTEND_FRAMEWORK_CHOICES;
-    const availableRenderingChoices =
-      plan.architecture === "microfrontend"
-        ? FRONTEND_RENDERING_CHOICES.filter((choice) => choice.value === "client")
-        : FRONTEND_RENDERING_CHOICES;
+      filterChoices(
+        FRONTEND_FRAMEWORK_CHOICES,
+        getSupportedFrontendFrameworks(plan.packageManager, plan.architecture),
+      );
 
-    const frontendCoreAnswers = await prompts(
+    const frameworkAnswer = await prompts(
       [
         {
           type: availableFrontendFrameworkChoices.length > 1 ? "select" : null,
@@ -507,12 +559,31 @@ export async function collectProjectPlan(
           choices: availableFrontendFrameworkChoices,
           initial: getInitialChoiceIndex(availableFrontendFrameworkChoices, plan.frontend?.framework),
         },
+      ],
+      { onCancel: cancelHandler },
+    );
+
+    const resolvedFramework =
+      frameworkAnswer.framework ??
+      plan.frontend?.framework ??
+      availableFrontendFrameworkChoices[0]?.value ??
+      "react-vite";
+    const resolvedRenderingChoices = filterChoices(
+      FRONTEND_RENDERING_CHOICES,
+      getSupportedRenderingModes(resolvedFramework, plan.architecture),
+    );
+    const frontendCoreAnswers = await prompts(
+      [
         {
-          type: availableRenderingChoices.length > 1 ? "select" : null,
+          type: resolvedRenderingChoices.length > 1 ? "select" : null,
           name: "rendering",
           message: "Rendering mode",
-          choices: availableRenderingChoices,
-          initial: getInitialChoiceIndex(availableRenderingChoices, plan.frontend?.rendering),
+          choices: resolvedRenderingChoices,
+          initial: getInitialChoiceIndex(
+            resolvedRenderingChoices,
+            plan.frontend?.rendering ??
+              getDefaultRenderingMode(resolvedFramework, plan.intent, plan.architecture),
+          ),
         },
         {
           type: "toggle",
@@ -530,16 +601,36 @@ export async function collectProjectPlan(
     );
 
     plan.frontend = {
-      framework: frontendCoreAnswers.framework ?? plan.frontend?.framework ?? "react-vite",
-      rendering: frontendCoreAnswers.rendering ?? plan.frontend?.rendering ?? "client",
+      framework: resolvedFramework,
+      rendering:
+        frontendCoreAnswers.rendering ??
+        plan.frontend?.rendering ??
+        getDefaultRenderingMode(resolvedFramework, plan.intent, plan.architecture),
       styling: plan.frontend?.styling ?? "tailwind-css",
       uiLibrary: plan.frontend?.uiLibrary ?? "none",
       state: plan.frontend?.state ?? "none",
       dataFetching: plan.frontend?.dataFetching ?? "native-fetch",
     };
+    const frontendConfig = plan.frontend;
+
+    if (!resolvedRenderingChoices.some((choice) => choice.value === frontendConfig.rendering)) {
+      frontendConfig.rendering = getDefaultRenderingMode(
+        frontendConfig.framework,
+        plan.intent,
+        plan.architecture,
+      );
+    }
 
     if (frontendCoreAnswers.customizeFrontend) {
-      const frontendAnswers = await prompts(
+      const availableUiLibraryChoices = filterChoices(
+        UI_LIBRARY_CHOICES,
+        getSupportedUiLibraries(frontendConfig.framework),
+      );
+      const availableStateChoices = filterChoices(
+        STATE_CHOICES,
+        getSupportedStateChoices(frontendConfig.framework, plan.intent),
+      );
+      const frontendPrimaryAnswers = await prompts(
         [
           {
             type: "select",
@@ -549,37 +640,75 @@ export async function collectProjectPlan(
             initial: getInitialChoiceIndex(STYLING_CHOICES, plan.frontend?.styling),
           },
           {
-            type: "select",
+            type: availableUiLibraryChoices.length > 1 ? "select" : null,
             name: "uiLibrary",
             message: "UI library",
-            choices: UI_LIBRARY_CHOICES,
-            initial: getInitialChoiceIndex(UI_LIBRARY_CHOICES, plan.frontend?.uiLibrary),
+            choices: availableUiLibraryChoices,
+            initial: getInitialChoiceIndex(availableUiLibraryChoices, plan.frontend?.uiLibrary),
           },
           {
-            type: plan.intent === "landing-page" ? null : "select",
+            type: plan.intent === "landing-page" || availableStateChoices.length <= 1 ? null : "select",
             name: "state",
             message: "State layer",
-            choices: STATE_CHOICES,
-            initial: getInitialChoiceIndex(STATE_CHOICES, plan.frontend?.state),
-          },
-          {
-            type: plan.intent === "landing-page" ? null : "select",
-            name: "dataFetching",
-            message: "Data fetching",
-            choices: DATA_FETCHING_CHOICES,
-            initial: getInitialChoiceIndex(DATA_FETCHING_CHOICES, plan.frontend?.dataFetching),
+            choices: availableStateChoices,
+            initial: getInitialChoiceIndex(availableStateChoices, plan.frontend?.state),
           },
         ],
         { onCancel: cancelHandler },
       );
+      const selectedState =
+        frontendPrimaryAnswers.state ?? availableStateChoices[0]?.value ?? "none";
+      const availableDataFetchingChoices = filterChoices(
+        DATA_FETCHING_CHOICES,
+        getSupportedDataFetchingChoicesForState(
+          frontendConfig.framework,
+          plan.intent,
+          selectedState,
+        ),
+      );
+      const frontendDataAnswers: { dataFetching?: FrontendConfig["dataFetching"] } =
+        plan.intent === "landing-page" || availableDataFetchingChoices.length <= 1
+          ? {}
+          : await prompts(
+              [
+                {
+                  type: "select",
+                  name: "dataFetching",
+                  message: "Data fetching",
+                  choices: availableDataFetchingChoices,
+                  initial: getInitialChoiceIndex(
+                    availableDataFetchingChoices,
+                    plan.frontend?.dataFetching,
+                  ),
+                },
+              ],
+              { onCancel: cancelHandler },
+            );
+      const selectedDataFetching =
+        frontendDataAnswers.dataFetching ??
+        availableDataFetchingChoices[0]?.value ??
+        "native-fetch";
+      const refinedStateChoices = filterChoices(
+        STATE_CHOICES,
+        getSupportedStateChoicesForDataFetching(
+          frontendConfig.framework,
+          plan.intent,
+          selectedDataFetching,
+        ),
+      );
+      const normalizedState =
+        refinedStateChoices.some((choice) => choice.value === selectedState)
+          ? selectedState
+          : refinedStateChoices[0]?.value ?? "none";
 
       plan.frontend = {
-        framework: plan.frontend.framework,
-        rendering: plan.frontend.rendering,
-        styling: frontendAnswers.styling ?? plan.frontend.styling,
-        uiLibrary: frontendAnswers.uiLibrary ?? plan.frontend.uiLibrary,
-        state: frontendAnswers.state ?? plan.frontend.state,
-        dataFetching: frontendAnswers.dataFetching ?? plan.frontend.dataFetching,
+        framework: frontendConfig.framework,
+        rendering: frontendConfig.rendering,
+        styling: frontendPrimaryAnswers.styling ?? frontendConfig.styling,
+        uiLibrary:
+          frontendPrimaryAnswers.uiLibrary ?? availableUiLibraryChoices[0]?.value ?? "none",
+        state: normalizedState,
+        dataFetching: selectedDataFetching,
       };
     }
   } else {
@@ -587,16 +716,12 @@ export async function collectProjectPlan(
   }
 
   if (needsBackend(plan.intent)) {
-    const languageChoices = [
-      { title: "TypeScript", value: "typescript" },
-      { title: "JavaScript", value: "javascript" },
-    ];
     const adapterChoices = [
       { title: "Fastify", value: "fastify" },
       { title: "Express", value: "express" },
     ];
 
-    const backendCoreAnswers = await prompts(
+    const backendFrameworkAnswers = await prompts(
       [
         {
           type: "select",
@@ -605,13 +730,32 @@ export async function collectProjectPlan(
           choices: BACKEND_FRAMEWORK_CHOICES,
           initial: getInitialChoiceIndex(BACKEND_FRAMEWORK_CHOICES, plan.backend?.framework),
         },
-        {
-          type: "select",
-          name: "language",
-          message: "Language",
-          choices: languageChoices,
-          initial: getInitialChoiceIndex(languageChoices, plan.backend?.language),
-        },
+      ],
+      { onCancel: cancelHandler },
+    );
+
+    const backendFramework = backendFrameworkAnswers.framework ?? plan.backend?.framework ?? "hono";
+    const languageChoices = getSupportedBackendLanguages(backendFramework).map((value) => ({
+      title: value === "typescript" ? "TypeScript" : "JavaScript",
+      value,
+    }));
+    const backendLanguageAnswers: { language?: BackendConfig["language"] } =
+      languageChoices.length > 1
+        ? await prompts(
+            [
+              {
+                type: "select",
+                name: "language",
+                message: "Language",
+                choices: languageChoices,
+                initial: getInitialChoiceIndex(languageChoices, plan.backend?.language),
+              },
+            ],
+            { onCancel: cancelHandler },
+          )
+        : {};
+    const backendSetupAnswers = await prompts(
+      [
         {
           type: "toggle",
           name: "customizeBackend",
@@ -624,8 +768,11 @@ export async function collectProjectPlan(
       { onCancel: cancelHandler },
     );
 
-    const backendFramework = backendCoreAnswers.framework ?? plan.backend?.framework ?? "hono";
-    const backendLanguage = backendCoreAnswers.language ?? plan.backend?.language ?? "typescript";
+    const backendLanguage =
+      backendLanguageAnswers.language ??
+      languageChoices[0]?.value ??
+      plan.backend?.language ??
+      "typescript";
 
     plan.backend = {
       framework: backendFramework,
@@ -640,7 +787,7 @@ export async function collectProjectPlan(
       websockets: plan.backend?.websockets ?? false,
     };
 
-    if (backendCoreAnswers.customizeBackend) {
+    if (backendSetupAnswers.customizeBackend) {
       const backendDataAnswers = await prompts(
         [
           {
@@ -854,13 +1001,10 @@ export async function collectProjectPlan(
     }
   }
 
-  const availableTestRunnerChoices = TEST_RUNNER_CHOICES.filter((choice) => {
-    if (!plan.frontend && !needsChromeExtension(plan.intent)) {
-      return choice.value === "jest" || choice.value === "vitest";
-    }
-
-    return true;
-  });
+  const availableTestRunnerChoices = filterChoices(
+    TEST_RUNNER_CHOICES,
+    getSupportedTestRunners(plan),
+  );
 
   const availableTestEnvironmentChoices = TEST_ENVIRONMENT_CHOICES.filter((choice) => {
     if (!plan.frontend && !needsChromeExtension(plan.intent)) {
@@ -897,7 +1041,7 @@ export async function collectProjectPlan(
     const testingAnswers = await prompts(
       [
         {
-          type: "select",
+          type: availableTestRunnerChoices.length > 1 ? "select" : null,
           name: "runner",
           message: "Test runner",
           choices: availableTestRunnerChoices,

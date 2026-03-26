@@ -8,6 +8,7 @@ import { normalizeProjectPlan } from "./engines/decision.js";
 import { detectEnvironment } from "./engines/environment.js";
 import { generateProject } from "./engines/generator.js";
 import { applyIntentDefaults, buildDefaultPlan } from "./engines/prompts.js";
+import { packageManagerScriptInvocation } from "./guidance.js";
 import {
   isNodeVersionSupportedForPlan,
   minimumSupportedNodeVersionHint,
@@ -165,6 +166,23 @@ function parseArgs(argv: string[]): ParsedArgs {
   }
 
   return parsed;
+}
+
+function installCommandForPackageManager(packageManager: ProjectPlan["packageManager"]): {
+  command: string;
+  args: string[];
+} {
+  switch (packageManager) {
+    case "pnpm":
+      return { command: "pnpm", args: ["install"] };
+    case "yarn":
+      return { command: "yarn", args: ["install"] };
+    case "bun":
+      return { command: "bun", args: ["install"] };
+    case "npm":
+    default:
+      return { command: "npm", args: ["install", "--no-audit", "--no-fund"] };
+  }
 }
 
 function lastLogs(logs: string[]): string {
@@ -393,14 +411,24 @@ async function verifyHttpRuntime(
 
 async function verifyPreviewRuntime(
   context: ScenarioExecutionContext,
-  previewCommand: { cwd?: string; args: string[]; env?: Record<string, string | undefined> },
+  previewCommand: {
+    cwd?: string;
+    script: string;
+    extraArgs?: string[];
+    env?: Record<string, string | undefined>;
+  },
 ): Promise<void> {
+  const invocation = packageManagerScriptInvocation(
+    context.plan.packageManager,
+    previewCommand.script,
+    previewCommand.extraArgs,
+  );
   await verifyHttpRuntime(
     context,
     {
       cwd: previewCommand.cwd,
-      command: "npm",
-      args: ["run", ...previewCommand.args],
+      command: invocation.command,
+      args: invocation.args,
       env: previewCommand.env,
     },
   );
@@ -411,12 +439,18 @@ async function verifyScriptRuntime(
   command: {
     cwd?: string;
     script: string;
+    extraArgs?: string[];
     env?: Record<string, string | undefined>;
   },
   targets: Array<{ url: string }>,
 ): Promise<void> {
   const cwd = command.cwd ? join(context.targetDir, command.cwd) : context.targetDir;
-  const started = startProcess("npm", ["run", command.script], cwd, command.env);
+  const invocation = packageManagerScriptInvocation(
+    context.plan.packageManager,
+    command.script,
+    command.extraArgs,
+  );
+  const started = startProcess(invocation.command, invocation.args, cwd, command.env);
 
   try {
     for (const target of targets) {
@@ -437,10 +471,15 @@ async function verifyScriptRuntime(
 
 async function verifyApiRuntime(
   context: ScenarioExecutionContext,
-  command: { cwd?: string; script: string; path: string },
+  command: { cwd?: string; script: string; extraArgs?: string[]; path: string },
 ): Promise<void> {
   const cwd = command.cwd ? join(context.targetDir, command.cwd) : context.targetDir;
-  const started = startProcess("npm", ["run", command.script], cwd, {
+  const invocation = packageManagerScriptInvocation(
+    context.plan.packageManager,
+    command.script,
+    command.extraArgs,
+  );
+  const started = startProcess(invocation.command, invocation.args, cwd, {
     PORT: String(context.port),
   });
 
@@ -548,7 +587,8 @@ export const runtimeScenarios: RuntimeScenario[] = [
       return verifyPreviewRuntime(
         context,
         {
-          args: ["preview", "--", "--host", "127.0.0.1", "--port", String(context.port)],
+          script: "preview",
+          extraArgs: ["--host", "127.0.0.1", "--port", String(context.port)],
         },
       );
     },
@@ -573,7 +613,8 @@ export const runtimeScenarios: RuntimeScenario[] = [
       return verifyPreviewRuntime(
         context,
         {
-          args: ["start", "--", "--hostname", "127.0.0.1", "--port", String(context.port)],
+          script: "start",
+          extraArgs: ["--hostname", "127.0.0.1", "--port", String(context.port)],
         },
       );
     },
@@ -598,8 +639,41 @@ export const runtimeScenarios: RuntimeScenario[] = [
       return verifyPreviewRuntime(
         context,
         {
-          args: ["preview", "--", "--host", "127.0.0.1", "--port", String(context.port)],
+          script: "preview",
+          extraArgs: ["--host", "127.0.0.1", "--port", String(context.port)],
         },
+      );
+    },
+  },
+  {
+    name: "frontend-remix-bun",
+    description: "Frontend app runtime on Remix with Bun",
+    intent: "frontend-app",
+    frontendFramework: "remix",
+    mode: "http",
+    configure(plan) {
+      plan.packageManager = "bun";
+      plan.frontend = {
+        framework: "remix",
+        rendering: "ssr",
+        styling: "tailwind-css",
+        uiLibrary: "chakra-ui",
+        state: "jotai",
+        dataFetching: "apollo-client",
+      };
+    },
+    runVerification(context) {
+      return verifyScriptRuntime(
+        context,
+        {
+          script: "dev",
+          extraArgs: ["--host", "127.0.0.1", "--port", String(context.port)],
+          env: {
+            HOST: "127.0.0.1",
+            PORT: String(context.port),
+          },
+        },
+        [{ url: `http://127.0.0.1:${context.port}/` }],
       );
     },
   },
@@ -623,7 +697,8 @@ export const runtimeScenarios: RuntimeScenario[] = [
       return verifyPreviewRuntime(
         context,
         {
-          args: ["preview", "--", "--host", "127.0.0.1", "--port", String(context.port)],
+          script: "preview",
+          extraArgs: ["--host", "127.0.0.1", "--port", String(context.port)],
         },
       );
     },
@@ -680,7 +755,8 @@ export const runtimeScenarios: RuntimeScenario[] = [
       return verifyPreviewRuntime(
         context,
         {
-          args: ["preview", "--", "--host", "127.0.0.1", "--port", String(context.port)],
+          script: "preview",
+          extraArgs: ["--host", "127.0.0.1", "--port", String(context.port)],
         },
       );
     },
@@ -705,7 +781,8 @@ export const runtimeScenarios: RuntimeScenario[] = [
       return verifyPreviewRuntime(
         context,
         {
-          args: ["preview", "--", "--host", "127.0.0.1", "--port", String(context.port)],
+          script: "preview",
+          extraArgs: ["--host", "127.0.0.1", "--port", String(context.port)],
         },
       );
     },
@@ -1032,14 +1109,32 @@ async function runScenario(
     };
   }
 
+  if (!environment.packageManagers[plan.packageManager].installed) {
+    console.log(
+      `[${scenario.name}] skipped because ${plan.packageManager} is not installed in the current environment.`,
+    );
+    if (!keepFixtures) {
+      await rm(fixtureRoot, { recursive: true, force: true });
+    }
+    return {
+      name: scenario.name,
+      intent: scenario.intent,
+      targetDir,
+      filesWritten: 0,
+      skipped: true,
+    };
+  }
+
   const generated = await generateProject(plan, environment);
 
   try {
     console.log(`[${scenario.name}] installing dependencies`);
-    await runCommand("npm", ["install", "--no-audit", "--no-fund"], targetDir);
+    const installInvocation = installCommandForPackageManager(plan.packageManager);
+    await runCommand(installInvocation.command, installInvocation.args, targetDir);
 
     console.log(`[${scenario.name}] building scaffold`);
-    await runCommand("npm", ["run", "build"], targetDir);
+    const buildInvocation = packageManagerScriptInvocation(plan.packageManager, "build");
+    await runCommand(buildInvocation.command, buildInvocation.args, targetDir);
 
     console.log(`[${scenario.name}] verifying ${scenario.mode}`);
     await scenario.runVerification({

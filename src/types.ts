@@ -109,6 +109,11 @@ export interface EnvironmentInfo {
   nodeVersion: string;
   recommendedPackageManager: PackageManager;
   packageManagers: Record<PackageManager, BinaryStatus>;
+  systemTools?: {
+    git?: BinaryStatus;
+    docker?: BinaryStatus;
+    corepack?: BinaryStatus;
+  };
 }
 
 export interface PackageManagerMetadata {
@@ -236,4 +241,25 @@ export interface GeneratedProjectResult {
 export interface InstallResult {
   executed: string[];
   skipped: string[];
+  dependencyInstall: {
+    attempted: boolean;
+    succeeded: boolean;
+    skipped: boolean;
+    available: boolean;
+    command: string;
+    failureReason?: string;
+  };
+}
+
+export interface AdvisoryItem {
+  title: string;
+  detail: string;
+  command?: string;
+}
+
+export interface PostCreateGuidance {
+  nextCommands: string[];
+  requiredBeforeRun: AdvisoryItem[];
+  recommended: AdvisoryItem[];
+  stackNotes: string[];
 }

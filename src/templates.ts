@@ -8,6 +8,13 @@ import type {
   PackageManagerMetadata,
   ProjectPlan,
 } from "./types.js";
+import {
+  buildTemplateGuidance,
+  getDefaultLocalUrl,
+  packageManagerCiInstallCommand,
+  packageManagerInstallCommand,
+  packageManagerRunCommand,
+} from "./guidance.js";
 import { generatedProjectNodeEngine } from "./utils/node-compat.js";
 import { joinSentence, toConstantCase, toTitleCase } from "./utils/strings.js";
 import {
@@ -107,48 +114,6 @@ function nodeVersionSpec(plan: ProjectPlan): string {
 
 function shouldGenerateNodeVersionFile(plan: ProjectPlan): boolean {
   return plan.nodeStrategy === "custom" && Boolean(plan.customNodeVersion);
-}
-
-function packageManagerInstallCommand(packageManager: PackageManager): string {
-  switch (packageManager) {
-    case "pnpm":
-      return "pnpm install";
-    case "yarn":
-      return "yarn install";
-    case "bun":
-      return "bun install";
-    case "npm":
-    default:
-      return "npm install";
-  }
-}
-
-function packageManagerCiInstallCommand(packageManager: PackageManager): string {
-  switch (packageManager) {
-    case "pnpm":
-      return "pnpm install --frozen-lockfile";
-    case "yarn":
-      return "yarn install --immutable";
-    case "bun":
-      return "bun install --frozen-lockfile";
-    case "npm":
-    default:
-      return "npm ci";
-  }
-}
-
-function packageManagerRunCommand(packageManager: PackageManager, script: string): string {
-  switch (packageManager) {
-    case "yarn":
-      return `yarn ${script}`;
-    case "bun":
-      return `bun run ${script}`;
-    case "pnpm":
-      return `pnpm run ${script}`;
-    case "npm":
-    default:
-      return `npm run ${script}`;
-  }
 }
 
 function editorConfigContent(): string {
@@ -538,32 +503,9 @@ function architectureDoc(plan: ProjectPlan): string {
 }
 
 function readme(plan: ProjectPlan): string {
+  const guidance = buildTemplateGuidance(plan);
   const installCommand = packageManagerInstallCommand(plan.packageManager);
-  const scripts =
-    plan.architecture === "monorepo" || plan.architecture === "microfrontend"
-      ? appendQualityScripts(
-          plan,
-          plan.workspace.tool === "nx"
-            ? {
-                dev: "nx run-many -t dev",
-                build: "nx run-many -t build",
-              }
-            : {
-                dev: "turbo dev",
-                build: "turbo build",
-              },
-        )
-      : singlePackageScripts(plan);
-  const scriptCommands = [
-    scripts.dev ? packageManagerRunCommand(plan.packageManager, "dev") : undefined,
-    scripts.build ? packageManagerRunCommand(plan.packageManager, "build") : undefined,
-    scripts.check ? packageManagerRunCommand(plan.packageManager, "check") : undefined,
-  ].filter(Boolean) as string[];
-  const testCommand = scripts.test
-    ? packageManagerRunCommand(plan.packageManager, "test")
-    : scripts["test:e2e"]
-      ? packageManagerRunCommand(plan.packageManager, "test:e2e")
-      : undefined;
+  const runtimeCommands = guidance.nextCommands.filter((command) => command !== installCommand);
   const structure =
     plan.architecture === "monorepo" || plan.architecture === "microfrontend"
       ? ["- `apps/`: runnable applications", "- `packages/`: shared code", "- `docs/`: generated project documentation"]
@@ -577,7 +519,7 @@ function readme(plan: ProjectPlan): string {
     "## Quick Start",
     "```bash",
     installCommand,
-    ...scriptCommands.slice(0, 1),
+    ...runtimeCommands.slice(0, 1),
     "```",
     "",
     "## Stack",
@@ -594,31 +536,50 @@ function readme(plan: ProjectPlan): string {
     `- Tooling profiles: ESLint ${plan.tooling.eslintProfile}, Prettier ${plan.tooling.prettierProfile}, Husky ${plan.tooling.huskyProfile}`,
     `- AI rule mode: ${toTitleCase(plan.ai.ruleMode)}`,
     "",
+    "## First Run Requirements",
+    ...(guidance.requiredBeforeRun.length > 0
+      ? guidance.requiredBeforeRun.flatMap((item) => [
+          `- ${item.title}: ${item.detail}`,
+          ...(item.command ? [`  Command: \`${item.command}\``] : []),
+        ])
+      : [
+          "- No extra machine-level prerequisites were detected beyond installing dependencies with the selected package manager.",
+        ]),
+    "",
+    "## Recommended Setup",
+    ...guidance.recommended.flatMap((item) => [
+      `- ${item.title}: ${item.detail}`,
+      ...(item.command ? [`  Command: \`${item.command}\``] : []),
+    ]),
+    "",
     "## Common Commands",
     "```bash",
-    ...scriptCommands,
-    ...(testCommand ? [testCommand] : []),
+    ...runtimeCommands,
     "```",
     "",
     "## Command Guide",
-    scriptCommands[0]
-      ? `- \`${scriptCommands[0]}\` starts the local development surface so you can inspect the generated app, API, workspace, or CLI wiring immediately.`
+    runtimeCommands[0]
+      ? `- \`${runtimeCommands[0]}\` is the fastest way to inspect the generated starter surface and confirm the scaffold boots on your machine.`
       : undefined,
-    scriptCommands[1]
-      ? `- \`${scriptCommands[1]}\` produces a production build and is the fastest way to catch framework or bundler issues before shipping changes.`
+    runtimeCommands.find((command) => command.endsWith("build"))
+      ? `- \`${runtimeCommands.find((command) => command.endsWith("build"))}\` produces a production build and catches bundler or framework integration issues before you ship changes.`
       : undefined,
-    testCommand
-      ? `- \`${testCommand}\` validates the generated test harness so your project starts with a working quality gate instead of a placeholder script.`
+    runtimeCommands.find((command) => command.endsWith("check"))
+      ? `- \`${runtimeCommands.find((command) => command.endsWith("check"))}\` runs the scaffold's combined validation flow for linting, type safety, formatting, tests, and build checks where applicable.`
       : undefined,
-    scriptCommands[2]
-      ? `- \`${scriptCommands[2]}\` runs the scaffold's combined validation flow for linting, type safety, formatting, tests, and build checks where applicable.`
+    runtimeCommands.find((command) => command.includes("test"))
+      ? `- \`${runtimeCommands.find((command) => command.includes("test"))}\` validates the generated test harness so your project starts with a real quality gate instead of a placeholder script.`
       : undefined,
+    `- Always run framework CLIs through package scripts, for example \`${packageManagerRunCommand(plan.packageManager, "build")}\` instead of raw package-manager bundler commands, so local binaries like Remix, Vite, or Next resolve correctly from node_modules.`,
     "",
     "## Tooling Defaults",
     `- ESLint: ${plan.tooling.eslint ? `enabled (${plan.tooling.eslintProfile}) to keep code quality guardrails on from day one.` : "disabled. Enable it later if the team wants lint-driven feedback."}`,
     `- Prettier: ${plan.tooling.prettier ? `enabled (${plan.tooling.prettierProfile}) so formatting stays consistent across contributors and AI assistants.` : "disabled. Add it when the team wants enforced formatting conventions."}`,
     `- Husky: ${plan.tooling.husky ? `enabled (${plan.tooling.huskyProfile}) to enforce checks before commits land locally.` : "disabled by default because local git hooks are team-policy specific and not every project wants them."}`,
     `- Commitlint: ${plan.tooling.commitlint ? "enabled to keep commit messages consistent with release tooling." : "disabled unless you explicitly opt into commit-message enforcement."}`,
+    "",
+    "## Stack Notes",
+    ...guidance.stackNotes.map((note) => `- ${note}`),
     "",
     "## Project Structure",
     ...structure,
@@ -631,9 +592,9 @@ function readme(plan: ProjectPlan): string {
     "- `AGENTS.md` and optional tool-specific directories contain AI rules.",
     "",
     "## Next Steps",
-    "1. Replace placeholder files with your domain-specific UI, routes, and business logic.",
-    "2. Review the generated docs and adjust stack decisions if the project direction changes.",
-    "3. Tighten CI, deployment, and test coverage before the first production release.",
+    "1. Run the first prerequisite and daily commands shown above so you confirm the scaffold works before making large changes.",
+    "2. Replace placeholder files with your domain-specific UI, routes, APIs, and business logic.",
+    "3. Review the generated docs and tighten CI, deployment, and test coverage before the first production release.",
     "",
   ]
     .filter(Boolean)
@@ -641,61 +602,59 @@ function readme(plan: ProjectPlan): string {
 }
 
 function gettingStartedDoc(plan: ProjectPlan): string {
-  const scripts =
-    plan.architecture === "monorepo" || plan.architecture === "microfrontend"
-      ? appendQualityScripts(
-          plan,
-          plan.workspace.tool === "nx"
-            ? {
-                dev: "nx run-many -t dev",
-                build: "nx run-many -t build",
-              }
-            : {
-                dev: "turbo dev",
-                build: "turbo build",
-              },
-        )
-      : singlePackageScripts(plan);
-  const scriptCommands = [
-    scripts.dev ? packageManagerRunCommand(plan.packageManager, "dev") : undefined,
-    scripts.build ? packageManagerRunCommand(plan.packageManager, "build") : undefined,
-    scripts.check ? packageManagerRunCommand(plan.packageManager, "check") : undefined,
-  ].filter(Boolean) as string[];
-  const testCommand = scripts.test
-    ? packageManagerRunCommand(plan.packageManager, "test")
-    : scripts["test:e2e"]
-      ? packageManagerRunCommand(plan.packageManager, "test:e2e")
-      : undefined;
+  const guidance = buildTemplateGuidance(plan);
+  const installCommand = packageManagerInstallCommand(plan.packageManager);
+  const runtimeCommands = guidance.nextCommands.filter((command) => command !== installCommand);
 
   return [
     "# Getting Started",
     "",
     "## Installation",
     "```bash",
-    packageManagerInstallCommand(plan.packageManager),
+    installCommand,
     "```",
+    "",
+    "## One-Time Requirements",
+    ...(guidance.requiredBeforeRun.length > 0
+      ? guidance.requiredBeforeRun.flatMap((item) => [
+          `- ${item.title}: ${item.detail}`,
+          ...(item.command ? [`  Command: \`${item.command}\``] : []),
+        ])
+      : [
+          "- No extra machine setup is required beyond installing project dependencies.",
+        ]),
+    "",
+    "## Recommended Setup",
+    ...guidance.recommended.flatMap((item) => [
+      `- ${item.title}: ${item.detail}`,
+      ...(item.command ? [`  Command: \`${item.command}\``] : []),
+    ]),
     "",
     "## Daily Commands",
     "```bash",
-    ...scriptCommands,
-    ...(testCommand ? [testCommand] : []),
+    ...runtimeCommands,
     "```",
     "",
     "## Why These Commands Matter",
-    scriptCommands[0]
-      ? `- \`${scriptCommands[0]}\` is your day-to-day entry point for exploring the generated scaffold and replacing starter content with real features.`
+    runtimeCommands[0]
+      ? `- \`${runtimeCommands[0]}\` is your day-to-day entry point for exploring the generated scaffold and replacing starter content with real features.`
       : undefined,
-    scriptCommands[1]
-      ? `- \`${scriptCommands[1]}\` checks that production compilation still works before you push or release changes.`
+    runtimeCommands.find((command) => command.endsWith("build"))
+      ? `- \`${runtimeCommands.find((command) => command.endsWith("build"))}\` checks that production compilation still works before you push or release changes.`
       : undefined,
-    testCommand
-      ? `- \`${testCommand}\` confirms the generated test setup is still wired correctly after you begin customizing the project.`
+    runtimeCommands.find((command) => command.includes("test"))
+      ? `- \`${runtimeCommands.find((command) => command.includes("test"))}\` confirms the generated test setup is still wired correctly after you begin customizing the project.`
       : undefined,
-    scriptCommands[2]
-      ? `- \`${scriptCommands[2]}\` is the safest pre-push command because it runs the scaffold's combined validation flow.`
+    runtimeCommands.find((command) => command.endsWith("check"))
+      ? `- \`${runtimeCommands.find((command) => command.endsWith("check"))}\` is the safest pre-push command because it runs the scaffold's combined validation flow.`
       : undefined,
+    `- Use package scripts instead of raw tool commands. For example, prefer \`${packageManagerRunCommand(plan.packageManager, "dev")}\` over direct framework binaries so the generated local CLI dependencies are resolved correctly.`,
+    "",
+    "## Stack Notes",
+    ...guidance.stackNotes.map((note) => `- ${note}`),
     "",
     "## What To Tackle First",
+    "- Run the prerequisite commands above before treating the scaffold as ready for feature work.",
     "- Replace starter content and placeholder services.",
     "- Fill in environment variables from `.env.example` before wiring external systems.",
     "- Add tests around business-critical flows before the scaffold starts drifting.",
@@ -767,7 +726,11 @@ function frontendDependencies(framework: FrontendFramework): {
           react: "latest",
           "react-dom": "latest",
         },
-        devDependencies: {},
+        devDependencies: {
+          "@remix-run/dev": "latest",
+          vite: "latest",
+          "vite-tsconfig-paths": "latest",
+        },
       };
     case "nuxt":
       return {
@@ -2225,11 +2188,21 @@ function angularSource(plan: ProjectPlan, context?: FrontendSurfaceContext): Gen
 
 function remixSource(plan: ProjectPlan, context?: FrontendSurfaceContext): GeneratedFile[] {
   const surface = frontendSurfaceDetails(plan, context);
+  const stylesheetPath =
+    plan.frontend?.styling === "scss" ? "./styles.scss?url" : "./styles.css?url";
   return [
     makeFile(
       "app/root.tsx",
       [
+        'import type { LinksFunction, MetaFunction } from "@remix-run/node";',
         "import { Links, Meta, Outlet, Scripts, ScrollRestoration } from \"@remix-run/react\";",
+        `import stylesheet from ${JSON.stringify(stylesheetPath)};`,
+        "",
+        `export const meta: MetaFunction = () => [{ title: ${JSON.stringify(toTitleCase(plan.projectName))} }];`,
+        "",
+        "export const links: LinksFunction = () => [",
+        "  { rel: \"stylesheet\", href: stylesheet },",
+        "];",
         "",
         "export default function App() {",
         "  return (",
@@ -2246,6 +2219,87 @@ function remixSource(plan: ProjectPlan, context?: FrontendSurfaceContext): Gener
         "    </html>",
         "  );",
         "}",
+        "",
+      ].join("\n"),
+    ),
+    makeFile(
+      "app/entry.client.tsx",
+      [
+        'import { RemixBrowser } from "@remix-run/react";',
+        'import { startTransition, StrictMode } from "react";',
+        'import { hydrateRoot } from "react-dom/client";',
+        "",
+        "startTransition(() => {",
+        "  hydrateRoot(",
+        "    document,",
+        "    <StrictMode>",
+        "      <RemixBrowser />",
+        "    </StrictMode>,",
+        "  );",
+        "});",
+        "",
+      ].join("\n"),
+    ),
+    makeFile(
+      "app/entry.server.tsx",
+      [
+        'import { PassThrough } from "node:stream";',
+        'import type { EntryContext } from "@remix-run/node";',
+        'import { createReadableStreamFromReadable } from "@remix-run/node";',
+        'import { RemixServer } from "@remix-run/react";',
+        'import { renderToPipeableStream } from "react-dom/server";',
+        "",
+        "const ABORT_DELAY = 5_000;",
+        "",
+        "export default function handleRequest(",
+        "  request: Request,",
+        "  responseStatusCode: number,",
+        "  responseHeaders: Headers,",
+        "  remixContext: EntryContext,",
+        ") {",
+        "  return new Promise<Response>((resolve, reject) => {",
+        "    let didError = false;",
+        "    const { pipe, abort } = renderToPipeableStream(",
+        "      <RemixServer context={remixContext} url={request.url} abortDelay={ABORT_DELAY} />,",
+        "      {",
+        "        onAllReady() {",
+        "          const body = new PassThrough();",
+        "          const stream = createReadableStreamFromReadable(body);",
+        "          responseHeaders.set(\"Content-Type\", \"text/html\");",
+        "          resolve(",
+        "            new Response(stream, {",
+        "              headers: responseHeaders,",
+        "              status: didError ? 500 : responseStatusCode,",
+        "            }),",
+        "          );",
+        "          pipe(body);",
+        "        },",
+        "        onShellError(error) {",
+        "          reject(error);",
+        "        },",
+        "        onError(error) {",
+        "          didError = true;",
+        "          console.error(error);",
+        "        },",
+        "      },",
+        "    );",
+        "",
+        "    setTimeout(abort, ABORT_DELAY);",
+        "  });",
+        "}",
+        "",
+      ].join("\n"),
+    ),
+    makeFile(
+      "vite.config.ts",
+      [
+        'import { vitePlugin as remix } from "@remix-run/dev";',
+        'import { defineConfig } from "vite";',
+        'import tsconfigPaths from "vite-tsconfig-paths";',
+        "",
+        "export default defineConfig({",
+        "  plugins: [remix(), tsconfigPaths()],",
+        "});",
         "",
       ].join("\n"),
     ),
@@ -2277,6 +2331,10 @@ function remixSource(plan: ProjectPlan, context?: FrontendSurfaceContext): Gener
         "}",
         "",
       ].join("\n"),
+    ),
+    makeFile(
+      plan.frontend?.styling === "scss" ? "app/styles.scss" : "app/styles.css",
+      styleFileContent(plan),
     ),
     ...tailwindSupportFiles(plan),
   ];
@@ -3120,16 +3178,21 @@ function dockerfile(plan: ProjectPlan): string {
 }
 
 function eslintConfigContent(plan: ProjectPlan): string {
-  const strictRules =
+  const generalRules =
+    plan.tooling.eslintProfile === "strict"
+      ? [
+          '      "eqeqeq": "error",',
+        ]
+      : [];
+  const typedStrictRules =
     plan.tooling.eslintProfile === "strict"
       ? [
           "      \"@typescript-eslint/no-explicit-any\": \"error\",",
           "      \"@typescript-eslint/explicit-function-return-type\": \"warn\",",
           "      \"@typescript-eslint/no-floating-promises\": \"error\",",
-          "      \"eqeqeq\": \"error\",",
         ]
       : [];
-  const moderateRules =
+  const typedModerateRules =
     plan.tooling.eslintProfile === "moderate" || plan.tooling.eslintProfile === "strict"
       ? [
           "      \"@typescript-eslint/consistent-type-imports\": \"error\",",
@@ -3148,10 +3211,25 @@ function eslintConfigContent(plan: ProjectPlan): string {
     "  js.configs.recommended,",
     "  ...tseslint.configs.recommended,",
     "  {",
+    "    files: [\"**/*.{ts,tsx,mts,cts}\"],",
+    "    languageOptions: {",
+    "      parserOptions: {",
+    "        projectService: true,",
+    "        tsconfigRootDir: import.meta.dirname,",
+    "      },",
+    "    },",
     "    rules: {",
     "      \"no-console\": \"off\",",
-    ...moderateRules,
-    ...strictRules,
+    ...typedModerateRules,
+    ...typedStrictRules,
+    ...generalRules,
+    "    },",
+    "  },",
+    "  {",
+    "    files: [\"**/*.{js,mjs,cjs}\"],",
+    "    rules: {",
+    "      \"no-console\": \"off\",",
+    ...generalRules,
     "    },",
     "  },",
     "];",
@@ -3304,6 +3382,7 @@ function testingFiles(plan: ProjectPlan): GeneratedFile[] {
   }
 
   if (plan.testing.runner === "playwright") {
+    const baseUrl = getDefaultLocalUrl(plan) ?? "http://127.0.0.1:3000";
     return [
       makeFile(
         `playwright.config.${configExtension}`,
@@ -3312,8 +3391,14 @@ function testingFiles(plan: ProjectPlan): GeneratedFile[] {
           "",
           "export default defineConfig({",
           "  testDir: \"tests\",",
+          "  webServer: {",
+          `    command: ${JSON.stringify(packageManagerRunCommand(plan.packageManager, "dev"))},`,
+          `    url: ${JSON.stringify(baseUrl)},`,
+          "    reuseExistingServer: !process.env.CI,",
+          "    timeout: 120_000,",
+          "  },",
           "  use: {",
-          "    baseURL: \"http://127.0.0.1:3000\",",
+          `    baseURL: ${JSON.stringify(baseUrl)},`,
           "  },",
           "});",
           "",
@@ -3335,6 +3420,7 @@ function testingFiles(plan: ProjectPlan): GeneratedFile[] {
   }
 
   if (plan.testing.runner === "cypress") {
+    const baseUrl = getDefaultLocalUrl(plan) ?? "http://127.0.0.1:3000";
     return [
       makeFile(
         `cypress.config.${configExtension}`,
@@ -3343,7 +3429,7 @@ function testingFiles(plan: ProjectPlan): GeneratedFile[] {
           "",
           "export default defineConfig({",
           "  e2e: {",
-          "    baseUrl: \"http://127.0.0.1:3000\",",
+          `    baseUrl: ${JSON.stringify(baseUrl)},`,
           "  },",
           "});",
           "",

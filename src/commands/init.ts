@@ -1,10 +1,11 @@
 import { dirname, join } from "node:path";
+import { buildRuntimeGuidance } from "../guidance.js";
 import { detectEnvironment } from "../engines/environment.js";
 import { generateProject } from "../engines/generator.js";
 import { runInstallers } from "../engines/installer.js";
 import { normalizeProjectPlan } from "../engines/decision.js";
 import { buildDefaultPlan, collectProjectPlan } from "../engines/prompts.js";
-import type { CliOptions, ResumeState } from "../types.js";
+import type { AdvisoryItem, CliOptions, ResumeState } from "../types.js";
 import { RESUME_STATE_PATH } from "../constants.js";
 import {
   ensureDir,
@@ -43,6 +44,51 @@ async function persistResume(plan: ResumeState["plan"]): Promise<void> {
 
 async function clearResume(): Promise<void> {
   await removeFile(join(process.cwd(), RESUME_STATE_PATH));
+}
+
+function printAdvisorySection(
+  title: string,
+  items: AdvisoryItem[],
+  options?: { warnItems?: boolean },
+): void {
+  if (items.length === 0) {
+    return;
+  }
+
+  info("");
+  step(`${title}:`);
+
+  for (const item of items) {
+    const log = options?.warnItems ? warn : info;
+    log(`  ${item.title}: ${item.detail}`);
+    if (item.command) {
+      info(`    ${item.command}`);
+    }
+  }
+}
+
+function printNextCommands(commands: string[]): void {
+  if (commands.length === 0) {
+    return;
+  }
+
+  info("");
+  step("Next commands:");
+  for (const command of commands) {
+    info(`    ${command}`);
+  }
+}
+
+function printStackNotes(notes: string[]): void {
+  if (notes.length === 0) {
+    return;
+  }
+
+  info("");
+  step("Stack notes:");
+  for (const note of notes) {
+    info(`  - ${note}`);
+  }
 }
 
 export async function runInitCommand(options: CliOptions): Promise<void> {
@@ -89,6 +135,7 @@ export async function runInitCommand(options: CliOptions): Promise<void> {
   }
 
   await clearResume();
+  const guidance = buildRuntimeGuidance(plan, environment, installResult, process.cwd());
 
   success("\nYour project is ready.");
   step(`Files written: ${generated.filesWritten.length}`);
@@ -102,4 +149,11 @@ export async function runInitCommand(options: CliOptions): Promise<void> {
       warn(reason);
     }
   }
+
+  printAdvisorySection("Required before run", guidance.requiredBeforeRun, {
+    warnItems: true,
+  });
+  printNextCommands(guidance.nextCommands);
+  printAdvisorySection("Recommended", guidance.recommended);
+  printStackNotes(guidance.stackNotes);
 }

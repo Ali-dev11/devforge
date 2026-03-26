@@ -13,6 +13,18 @@ import type {
   RuleCategory,
 } from "../types.js";
 import {
+  chooseSupportedPackageManager,
+  getSupportedBackendLanguages,
+  getDefaultRenderingMode,
+  getSupportedDataFetchingChoices,
+  getSupportedFrontendFrameworks,
+  getSupportedPackageManagers,
+  getSupportedRenderingModes,
+  getSupportedStateChoices,
+  getSupportedTestRunners,
+  getSupportedUiLibraries,
+} from "../guidance.js";
+import {
   isNodeVersionSupportedForPlan,
   minimumSupportedNodeVersionHint,
 } from "../utils/node-compat.js";
@@ -42,13 +54,20 @@ export function getAvailableRuleCategories(plan: ProjectPlan): RuleCategory[] {
 
 export function normalizeProjectPlan(
   inputPlan: ProjectPlan,
-  _environment: EnvironmentInfo,
+  environment: EnvironmentInfo,
 ): NormalizedPlanResult {
   const plan: ProjectPlan = JSON.parse(JSON.stringify(inputPlan)) as ProjectPlan;
   const warnings: string[] = [];
 
   if (plan.intent === "microfrontend-system") {
     plan.architecture = "microfrontend";
+  }
+
+  if (plan.intent !== "microfrontend-system" && plan.architecture === "microfrontend") {
+    warnings.push(
+      `Microfrontend architecture is only generated for the dedicated microfrontend-system intent; switching architecture to ${plan.intent === "chrome-extension" ? "modular" : "simple"}.`,
+    );
+    plan.architecture = plan.intent === "chrome-extension" ? "modular" : "simple";
   }
 
   if (plan.architecture === "microfrontend" && !plan.workspace.microfrontendStrategy) {
@@ -70,6 +89,15 @@ export function normalizeProjectPlan(
 
   if (plan.architecture === "monorepo" && !plan.workspace.tool) {
     plan.workspace.tool = "turborepo";
+  }
+
+  const supportedPackageManagers = getSupportedPackageManagers(plan.intent, plan.architecture);
+  if (!supportedPackageManagers.includes(plan.packageManager)) {
+    const nextPackageManager = chooseSupportedPackageManager(plan, environment);
+    warnings.push(
+      `${plan.packageManager} is not supported for ${plan.intent} projects with a ${plan.architecture} architecture; switching package manager to ${nextPackageManager}.`,
+    );
+    plan.packageManager = nextPackageManager;
   }
 
   if (plan.architecture === "microfrontend" && plan.workspace.remoteApps.length === 0) {
@@ -113,6 +141,81 @@ export function normalizeProjectPlan(
     if (plan.frontend.rendering !== "client") {
       warnings.push("Microfrontend scaffolds are generated as client-rendered apps; switching rendering mode to client.");
       plan.frontend.rendering = "client";
+    }
+  }
+
+  if (plan.frontend) {
+    const supportedFrameworks = getSupportedFrontendFrameworks(
+      plan.packageManager,
+      plan.architecture,
+    );
+
+    if (!supportedFrameworks.includes(plan.frontend.framework)) {
+      const compatiblePackageManager = getSupportedPackageManagers(plan.intent, plan.architecture).find(
+        (packageManager) =>
+          getSupportedFrontendFrameworks(packageManager, plan.architecture).includes(
+            plan.frontend?.framework ?? "react-vite",
+          ),
+      );
+
+      if (compatiblePackageManager) {
+        warnings.push(
+          `${plan.packageManager} is not currently verified for ${plan.frontend.framework}; switching package manager to ${compatiblePackageManager}.`,
+        );
+        plan.packageManager = compatiblePackageManager;
+      } else {
+        const fallbackFramework = supportedFrameworks[0] ?? "react-vite";
+        warnings.push(
+          `${plan.frontend.framework} is not supported with ${plan.packageManager}; switching frontend framework to ${fallbackFramework}.`,
+        );
+        plan.frontend.framework = fallbackFramework;
+      }
+    }
+
+    const supportedRenderingModes = getSupportedRenderingModes(
+      plan.frontend.framework,
+      plan.architecture,
+    );
+    if (!supportedRenderingModes.includes(plan.frontend.rendering)) {
+      const fallbackRendering = getDefaultRenderingMode(
+        plan.frontend.framework,
+        plan.intent,
+        plan.architecture,
+      );
+      warnings.push(
+        `${plan.frontend.framework} does not support ${plan.frontend.rendering} rendering in generated projects; switching rendering mode to ${fallbackRendering}.`,
+      );
+      plan.frontend.rendering = fallbackRendering;
+    }
+
+    const supportedUiLibraries = getSupportedUiLibraries(plan.frontend.framework);
+    if (!supportedUiLibraries.includes(plan.frontend.uiLibrary)) {
+      const fallbackUiLibrary = supportedUiLibraries[0] ?? "none";
+      warnings.push(
+        `${plan.frontend.uiLibrary} is not scaffolded for ${plan.frontend.framework}; switching UI library to ${fallbackUiLibrary}.`,
+      );
+      plan.frontend.uiLibrary = fallbackUiLibrary;
+    }
+
+    const supportedStateChoices = getSupportedStateChoices(plan.frontend.framework, plan.intent);
+    if (!supportedStateChoices.includes(plan.frontend.state)) {
+      const fallbackState = supportedStateChoices[0] ?? "none";
+      warnings.push(
+        `${plan.frontend.state} is not scaffolded for ${plan.frontend.framework}; switching state management to ${fallbackState}.`,
+      );
+      plan.frontend.state = fallbackState;
+    }
+
+    const supportedDataChoices = getSupportedDataFetchingChoices(
+      plan.frontend.framework,
+      plan.intent,
+    );
+    if (!supportedDataChoices.includes(plan.frontend.dataFetching)) {
+      const fallbackData = supportedDataChoices[0] ?? "native-fetch";
+      warnings.push(
+        `${plan.frontend.dataFetching} is not scaffolded for ${plan.frontend.framework}; switching data fetching to ${fallbackData}.`,
+      );
+      plan.frontend.dataFetching = fallbackData;
     }
   }
 
@@ -167,9 +270,12 @@ export function normalizeProjectPlan(
   }
 
   if (plan.backend) {
-    if (plan.backend.framework === "nestjs" && plan.backend.language !== "typescript") {
-      warnings.push("NestJS is generated as a TypeScript-first stack; switching backend language to TypeScript.");
-      plan.backend.language = "typescript";
+    const supportedBackendLanguages = getSupportedBackendLanguages(plan.backend.framework);
+    if (!supportedBackendLanguages.includes(plan.backend.language)) {
+      warnings.push(
+        `${plan.backend.framework} is generated as a ${supportedBackendLanguages.join("/")} stack; switching backend language to ${supportedBackendLanguages[0]}.`,
+      );
+      plan.backend.language = supportedBackendLanguages[0] ?? "typescript";
     }
 
     if (plan.backend.framework !== "nestjs") {
@@ -209,6 +315,21 @@ export function normalizeProjectPlan(
     plan.testing.environment = "none";
   }
 
+  const supportedTestRunners = getSupportedTestRunners(plan);
+  if (plan.testing.enabled && !supportedTestRunners.includes(plan.testing.runner)) {
+    const fallbackRunner = hasFrontendLikeSurface(plan)
+      ? (supportedTestRunners.find(
+          (runner) => runner === "vitest" || runner === "playwright" || runner === "jest",
+        ) ?? supportedTestRunners[0] ?? "vitest")
+      : (supportedTestRunners.find((runner) => runner === "jest" || runner === "vitest") ??
+        supportedTestRunners[0] ??
+        "jest");
+    warnings.push(
+      `${plan.testing.runner} is not scaffolded for the selected stack; switching test runner to ${fallbackRunner}.`,
+    );
+    plan.testing.runner = fallbackRunner;
+  }
+
   if (plan.testing.runner === "playwright" || plan.testing.runner === "cypress") {
     if (!plan.frontend && plan.intent !== "chrome-extension") {
       warnings.push("Browser E2E runners need a frontend surface; switching testing to Jest on Node.");
@@ -242,4 +363,8 @@ export function normalizeProjectPlan(
     filteredRuleCategories.length > 0 ? filteredRuleCategories : availableRuleCategories;
 
   return { plan, warnings };
+}
+
+function hasFrontendLikeSurface(plan: ProjectPlan): boolean {
+  return Boolean(plan.frontend) || plan.intent === "chrome-extension";
 }

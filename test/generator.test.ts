@@ -254,6 +254,103 @@ test("nextjs scaffolds include next type support and css-safe typecheck setup", 
   assert.match(nextEnvFile.content, /reference types="next"/);
 });
 
+test("remix bun scaffolds include runtime guidance, CLI dependencies, and typed-lint overrides", () => {
+  const plan = buildDefaultPlan(environment, cliOptions);
+  plan.packageManager = "bun";
+  plan.nodeStrategy = "custom";
+  plan.customNodeVersion = "23";
+  plan.frontend = {
+    framework: "remix",
+    rendering: "ssr",
+    styling: "tailwind-css",
+    uiLibrary: "chakra-ui",
+    state: "jotai",
+    dataFetching: "apollo-client",
+  };
+  plan.testing = {
+    enabled: true,
+    runner: "playwright",
+    environment: "browser-e2e",
+    includeExampleTests: true,
+  };
+
+  const files = buildProjectFiles(plan, environment);
+  const packageJsonFile = files.find((file) => file.path === "package.json");
+  const readmeFile = files.find((file) => file.path === "README.md");
+  const gettingStartedFile = files.find((file) => file.path === "docs/getting-started.md");
+  const eslintConfigFile = files.find((file) => file.path === "eslint.config.js");
+  const playwrightConfigFile = files.find((file) => file.path === "playwright.config.ts");
+  const viteConfigFile = files.find((file) => file.path === "vite.config.ts");
+  const entryClientFile = files.find((file) => file.path === "app/entry.client.tsx");
+  const entryServerFile = files.find((file) => file.path === "app/entry.server.tsx");
+
+  assert.ok(packageJsonFile);
+  assert.ok(readmeFile);
+  assert.ok(gettingStartedFile);
+  assert.ok(eslintConfigFile);
+  assert.ok(playwrightConfigFile);
+  assert.ok(viteConfigFile);
+  assert.ok(entryClientFile);
+  assert.ok(entryServerFile);
+
+  const packageJson = JSON.parse(packageJsonFile.content) as {
+    scripts: Record<string, string>;
+    dependencies: Record<string, string>;
+    devDependencies: Record<string, string>;
+    packageManager: string;
+  };
+
+  assert.match(packageJson.packageManager, /^bun@/);
+  assert.equal(packageJson.scripts.dev, "remix vite:dev");
+  assert.equal(packageJson.scripts.build, "remix vite:build");
+  assert.equal(packageJson.devDependencies["@remix-run/dev"], "latest");
+  assert.equal(packageJson.devDependencies.vite, "latest");
+  assert.equal(packageJson.devDependencies["vite-tsconfig-paths"], "latest");
+  assert.equal(packageJson.dependencies["@remix-run/react"], "latest");
+  assert.match(viteConfigFile.content, /vitePlugin as remix/);
+  assert.match(eslintConfigFile.content, /\*\*\/\*\.\{ts,tsx,mts,cts\}/);
+  assert.match(eslintConfigFile.content, /projectService: true/);
+  assert.match(eslintConfigFile.content, /\*\*\/\*\.\{js,mjs,cjs\}/);
+  assert.match(playwrightConfigFile.content, /command: "bun run dev"/);
+  assert.match(playwrightConfigFile.content, /baseURL: "http:\/\/localhost:3000"/);
+  assert.match(readmeFile.content, /First Run Requirements/);
+  assert.match(readmeFile.content, /Install Bun on each machine/);
+  assert.match(readmeFile.content, /Recommended Setup/);
+  assert.match(readmeFile.content, /npx playwright install/);
+  assert.match(readmeFile.content, /bun run dev/);
+  assert.match(readmeFile.content, /bun run build/);
+  assert.match(readmeFile.content, /instead of raw package-manager bundler commands/i);
+  assert.match(gettingStartedFile.content, /One-Time Requirements/);
+  assert.match(gettingStartedFile.content, /Recommended Setup/);
+  assert.match(gettingStartedFile.content, /nvm use/);
+});
+
+test("playwright docs and commands stay package-manager aware", () => {
+  const plan = buildDefaultPlan(environment, cliOptions);
+  plan.packageManager = "pnpm";
+  plan.testing = {
+    enabled: true,
+    runner: "playwright",
+    environment: "browser-e2e",
+    includeExampleTests: true,
+  };
+
+  const files = buildProjectFiles(plan, environment);
+  const readmeFile = files.find((file) => file.path === "README.md");
+  const gettingStartedFile = files.find((file) => file.path === "docs/getting-started.md");
+  const playwrightConfigFile = files.find((file) => file.path === "playwright.config.ts");
+
+  assert.ok(readmeFile);
+  assert.ok(gettingStartedFile);
+  assert.ok(playwrightConfigFile);
+
+  assert.match(readmeFile.content, /pnpm install/);
+  assert.match(readmeFile.content, /pnpm run dev/);
+  assert.match(readmeFile.content, /pnpm run check/);
+  assert.match(gettingStartedFile.content, /npx playwright install/);
+  assert.match(playwrightConfigFile.content, /command: "pnpm run dev"/);
+});
+
 test("nestjs and javascript backend scaffolds include compatible build settings", () => {
   const nestPlan = buildDefaultPlan(environment, cliOptions);
   nestPlan.intent = "backend-api";
