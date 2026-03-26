@@ -40,7 +40,7 @@ jobs:
           mkdir -p release-artifacts
           npm pack --ignore-scripts --pack-destination release-artifacts --cache /tmp/devforge-release-cache
       - name: Attest release artifact provenance
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: release-artifacts/*.tgz
       - name: Publish GitHub release
