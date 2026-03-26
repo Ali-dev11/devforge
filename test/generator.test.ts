@@ -283,6 +283,7 @@ test("remix bun scaffolds include runtime guidance, CLI dependencies, and typed-
   const viteConfigFile = files.find((file) => file.path === "vite.config.ts");
   const entryClientFile = files.find((file) => file.path === "app/entry.client.tsx");
   const entryServerFile = files.find((file) => file.path === "app/entry.server.tsx");
+  const postcssConfigFile = files.find((file) => file.path === "postcss.config.mjs");
 
   assert.ok(packageJsonFile);
   assert.ok(readmeFile);
@@ -292,6 +293,7 @@ test("remix bun scaffolds include runtime guidance, CLI dependencies, and typed-
   assert.ok(viteConfigFile);
   assert.ok(entryClientFile);
   assert.ok(entryServerFile);
+  assert.equal(postcssConfigFile, undefined);
 
   const packageJson = JSON.parse(packageJsonFile.content) as {
     scripts: Record<string, string>;
@@ -306,8 +308,12 @@ test("remix bun scaffolds include runtime guidance, CLI dependencies, and typed-
   assert.equal(packageJson.devDependencies["@remix-run/dev"], "latest");
   assert.equal(packageJson.devDependencies.vite, "latest");
   assert.equal(packageJson.devDependencies["vite-tsconfig-paths"], "latest");
+  assert.equal(packageJson.devDependencies["@tailwindcss/vite"], "latest");
+  assert.equal(packageJson.devDependencies["@tailwindcss/postcss"], undefined);
   assert.equal(packageJson.dependencies["@remix-run/react"], "latest");
   assert.match(viteConfigFile.content, /vitePlugin as remix/);
+  assert.match(viteConfigFile.content, /@tailwindcss\/vite/);
+  assert.match(viteConfigFile.content, /plugins: \[remix\(\), tsconfigPaths\(\), tailwindcss\(\)\]/);
   assert.match(eslintConfigFile.content, /\*\*\/\*\.\{ts,tsx,mts,cts\}/);
   assert.match(eslintConfigFile.content, /projectService: true/);
   assert.match(eslintConfigFile.content, /\*\*\/\*\.\{js,mjs,cjs\}/);

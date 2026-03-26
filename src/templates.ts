@@ -890,7 +890,7 @@ function collectDependencies(plan: ProjectPlan): {
     }
 
     if (plan.frontend.styling === "tailwind-css") {
-      if (["react-vite", "vue-vite", "svelte", "solidjs"].includes(plan.frontend.framework)) {
+      if (["react-vite", "vue-vite", "svelte", "solidjs", "remix"].includes(plan.frontend.framework)) {
         addRecord(devDependencies, {
           "@tailwindcss/vite": "latest",
           tailwindcss: "latest",
@@ -1485,7 +1485,7 @@ function tailwindSupportFiles(plan: ProjectPlan): GeneratedFile[] {
     return [];
   }
 
-  if (["react-vite", "vue-vite", "svelte", "solidjs"].includes(plan.frontend.framework)) {
+  if (["react-vite", "vue-vite", "svelte", "solidjs", "remix"].includes(plan.frontend.framework)) {
     return [];
   }
 
@@ -2190,6 +2190,7 @@ function remixSource(plan: ProjectPlan, context?: FrontendSurfaceContext): Gener
   const surface = frontendSurfaceDetails(plan, context);
   const stylesheetPath =
     plan.frontend?.styling === "scss" ? "./styles.scss?url" : "./styles.css?url";
+  const pluginLines = ["remix()", "tsconfigPaths()", ...(plan.frontend?.styling === "tailwind-css" ? ["tailwindcss()"] : [])];
   return [
     makeFile(
       "app/root.tsx",
@@ -2296,9 +2297,10 @@ function remixSource(plan: ProjectPlan, context?: FrontendSurfaceContext): Gener
         'import { vitePlugin as remix } from "@remix-run/dev";',
         'import { defineConfig } from "vite";',
         'import tsconfigPaths from "vite-tsconfig-paths";',
+        ...viteTailwindPluginImportLines(plan),
         "",
         "export default defineConfig({",
-        "  plugins: [remix(), tsconfigPaths()],",
+        vitePluginExpression(pluginLines),
         "});",
         "",
       ].join("\n"),

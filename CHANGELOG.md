@@ -23,6 +23,7 @@ The format follows Keep a Changelog and the version numbers follow Semantic Vers
 ### Fixed
 
 - Fixed Remix scaffolds to include the CLI/dev dependencies required for `npm run dev`, `pnpm run dev`, `yarn dev`, and `bun run dev` style workflows.
+- Fixed Tailwind-enabled Remix scaffolds to use the Vite Tailwind integration path instead of the PostCSS-only setup, which resolves the Bun production-build failure in the runtime matrix.
 - Fixed strict ESLint scaffolds so typed rules no longer run against config files such as `eslint.config.js`.
 - Stopped offering invalid combinations such as microfrontend architecture outside the microfrontend intent, NestJS with JavaScript, RTK Query without compatible Redux state, and ORMs when no database is selected.
 
