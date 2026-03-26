@@ -9,7 +9,7 @@ Track what changed in DevForge CLI across releases, including scaffolding behavi
 - [GitHub Releases](https://github.com/Ali-dev11/devforge/releases)
 - [Repository Changelog](https://github.com/Ali-dev11/devforge/blob/main/CHANGELOG.md)
 
-## [Unreleased]
+## [0.4.1] - 2026-03-26
 
 ### Changed
 

@@ -6,6 +6,8 @@ The format follows Keep a Changelog and the version numbers follow Semantic Vers
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-03-26
+
 ### Changed
 
 - Trimmed the published npm package so CI-only runtime-matrix binaries are no longer shipped in the public tarball.
