@@ -73,14 +73,14 @@
     "prompts": "^2.4.2"
   },
   "devDependencies": {
-    "@eslint/js": "^8.57.1",
-    "@typescript-eslint/eslint-plugin": "^7.18.0",
-    "@typescript-eslint/parser": "^7.18.0",
+    "@eslint/js": "^10.0.1",
+    "@typescript-eslint/eslint-plugin": "^8.57.2",
+    "@typescript-eslint/parser": "^8.57.2",
     "@types/node": "^25.5.0",
     "@types/prompts": "^2.4.9",
-    "eslint": "^8.57.1",
+    "eslint": "^10.1.0",
     "globals": "^17.4.0",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3"
+    "typescript": "^6.0.2"
   }
 }
