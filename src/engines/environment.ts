@@ -62,5 +62,10 @@ export function detectEnvironment(): EnvironmentInfo {
     nodeVersion: process.version,
     packageManagers,
     recommendedPackageManager: selectRecommendedPackageManager(packageManagers),
+    systemTools: {
+      git: detectBinary("git", ["--version"]),
+      docker: detectBinary("docker", ["--version"]),
+      corepack: detectBinary("corepack", ["--version"]),
+    },
   };
 }
