@@ -9,6 +9,26 @@ Track what changed in DevForge CLI across releases, including scaffolding behavi
 - [GitHub Releases](https://github.com/Ali-dev11/devforge/releases)
 - [Repository Changelog](https://github.com/Ali-dev11/devforge/blob/main/CHANGELOG.md)
 
+## [0.4.2] - 2026-03-26
+
+### Added
+
+- Added OS-aware post-create guidance that detects missing local prerequisites such as package managers, Playwright browsers, Git, Docker, and custom Node mismatches, then prints exact next-step install commands for macOS, Linux, and Windows.
+- Added generated README and getting-started guidance that mirrors the CLI output with install, run, build, check, and stack-specific follow-up commands.
+- Added exhaustive compatibility-matrix regression coverage across supported stack, tooling, testing, node-strategy, and template combinations.
+
+### Changed
+
+- Centralized stack capability rules so prompts, normalization, generated docs, and post-create guidance all share the same support matrix.
+- Tightened prompt flows to hide unsupported combinations instead of presenting them and correcting them later.
+- Restricted Bun support to verified stack paths and tailored generated command guidance to the selected package manager.
+
+### Fixed
+
+- Fixed Remix scaffolds to include the CLI/dev dependencies required for `npm run dev`, `pnpm run dev`, `yarn dev`, and `bun run dev` style workflows.
+- Fixed strict ESLint scaffolds so typed rules no longer run against config files such as `eslint.config.js`.
+- Stopped offering invalid combinations such as microfrontend architecture outside the microfrontend intent, NestJS with JavaScript, RTK Query without compatible Redux state, and ORMs when no database is selected.
+
 ## [0.4.1] - 2026-03-26
 
 ### Changed
