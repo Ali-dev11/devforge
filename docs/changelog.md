@@ -9,6 +9,16 @@ Track what changed in DevForge CLI across releases, including scaffolding behavi
 - [GitHub Releases](https://github.com/Ali-dev11/devforge/releases)
 - [Repository Changelog](https://github.com/Ali-dev11/devforge/blob/main/CHANGELOG.md)
 
+## [Unreleased]
+
+### Changed
+
+- Trimmed the published npm package so CI-only runtime-matrix binaries are no longer shipped in the public tarball.
+
+### Fixed
+
+- Replaced runtime package metadata reads with generated constants so the published CLI no longer depends on a runtime `package.json` asset lookup, which reduces scanner and bundle-analysis noise for the npm package.
+
 ## [0.4.0] - 2026-03-26
 
 ### Added
