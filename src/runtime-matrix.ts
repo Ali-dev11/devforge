@@ -300,27 +300,19 @@ async function stopProcess(processRef: StartedProcess): Promise<void> {
   await waitForProcessExit(processRef, 5_000);
 }
 
-async function waitForHttpText(
-  url: string,
-  expectations: string[] = [],
-  timeoutMs = 30_000,
-): Promise<string> {
+async function waitForHttpOk(url: string, timeoutMs = 30_000): Promise<void> {
   const startedAt = Date.now();
   let lastError: unknown;
 
   while (Date.now() - startedAt < timeoutMs) {
     try {
       const response = await fetch(url);
-      const body = await response.text();
 
-      if (response.ok && expectations.every((expectation) => body.includes(expectation))) {
-        return body;
+      if (response.ok) {
+        return;
       }
 
-      lastError =
-        response.ok
-          ? new Error(`Unexpected HTTP response body from ${url}`)
-          : new Error(`Unexpected HTTP response from ${url}: ${response.status} ${response.statusText}`);
+      lastError = new Error(`Unexpected HTTP response from ${url}: ${response.status} ${response.statusText}`);
     } catch (error) {
       lastError = error;
     }
@@ -376,7 +368,6 @@ async function verifyHttpRuntime(
     env?: Record<string, string | undefined>;
     path?: string;
   },
-  expectations: string[] = [],
 ): Promise<void> {
   const cwd = command.cwd ? join(context.targetDir, command.cwd) : context.targetDir;
   const started = startProcess(command.command, command.args, cwd, {
@@ -386,10 +377,7 @@ async function verifyHttpRuntime(
   });
 
   try {
-    await waitForHttpText(
-      `http://127.0.0.1:${context.port}${command.path ?? "/"}`,
-      expectations,
-    );
+    await waitForHttpOk(`http://127.0.0.1:${context.port}${command.path ?? "/"}`);
   } catch (error) {
     throw new Error(
       [
@@ -406,7 +394,6 @@ async function verifyHttpRuntime(
 async function verifyPreviewRuntime(
   context: ScenarioExecutionContext,
   previewCommand: { cwd?: string; args: string[]; env?: Record<string, string | undefined> },
-  expectations: string[] = [],
 ): Promise<void> {
   await verifyHttpRuntime(
     context,
@@ -416,7 +403,6 @@ async function verifyPreviewRuntime(
       args: ["run", ...previewCommand.args],
       env: previewCommand.env,
     },
-    expectations,
   );
 }
 
@@ -427,14 +413,14 @@ async function verifyScriptRuntime(
     script: string;
     env?: Record<string, string | undefined>;
   },
-  targets: Array<{ url: string; expectations?: string[] }>,
+  targets: Array<{ url: string }>,
 ): Promise<void> {
   const cwd = command.cwd ? join(context.targetDir, command.cwd) : context.targetDir;
   const started = startProcess("npm", ["run", command.script], cwd, command.env);
 
   try {
     for (const target of targets) {
-      await waitForHttpText(target.url, target.expectations ?? []);
+      await waitForHttpOk(target.url);
     }
   } catch (error) {
     throw new Error(
@@ -564,7 +550,6 @@ export const runtimeScenarios: RuntimeScenario[] = [
         {
           args: ["preview", "--", "--host", "127.0.0.1", "--port", String(context.port)],
         },
-        [],
       );
     },
   },
@@ -590,7 +575,6 @@ export const runtimeScenarios: RuntimeScenario[] = [
         {
           args: ["start", "--", "--hostname", "127.0.0.1", "--port", String(context.port)],
         },
-        [],
       );
     },
   },
@@ -616,7 +600,6 @@ export const runtimeScenarios: RuntimeScenario[] = [
         {
           args: ["preview", "--", "--host", "127.0.0.1", "--port", String(context.port)],
         },
-        [],
       );
     },
   },
@@ -642,7 +625,6 @@ export const runtimeScenarios: RuntimeScenario[] = [
         {
           args: ["preview", "--", "--host", "127.0.0.1", "--port", String(context.port)],
         },
-        [],
       );
     },
   },
@@ -675,7 +657,6 @@ export const runtimeScenarios: RuntimeScenario[] = [
             NITRO_PORT: String(context.port),
           },
         },
-        [],
       );
     },
   },
@@ -701,7 +682,6 @@ export const runtimeScenarios: RuntimeScenario[] = [
         {
           args: ["preview", "--", "--host", "127.0.0.1", "--port", String(context.port)],
         },
-        [],
       );
     },
   },
@@ -727,7 +707,6 @@ export const runtimeScenarios: RuntimeScenario[] = [
         {
           args: ["preview", "--", "--host", "127.0.0.1", "--port", String(context.port)],
         },
-        [],
       );
     },
   },

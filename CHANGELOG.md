@@ -26,6 +26,8 @@ The format follows Keep a Changelog and the version numbers follow Semantic Vers
 - Improved installer UX by surfacing explicit progress steps before dependency installation and git setup begin.
 - Added pnpm build-approval hints for browser-oriented scaffolds so common `esbuild` installs no longer stop at an approval warning on fresh pnpm setups.
 - Updated generated Tailwind Vite scaffolds to use the current Tailwind package integration instead of writing unprocessed `@tailwind` directives without the required plugin setup.
+- Added explicit least-privilege `GITHUB_TOKEN` permissions to the CI workflow so CodeQL no longer flags the runtime matrix jobs for inheriting repository-default token access.
+- Tightened local runtime-matrix HTTP probes so they verify successful startup without downloading page bodies over loopback HTTP, resolving the CodeQL insecure-download alert while keeping stack verification intact.
 
 ## [0.3.4] - 2026-03-26
 
