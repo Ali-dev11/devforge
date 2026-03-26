@@ -67,6 +67,18 @@ test("microfrontend intent forces architecture defaults", () => {
   assert.deepEqual(result.plan.workspace.remoteApps, ["catalog", "dashboard"]);
 });
 
+test("unsupported microfrontend strategies normalize to vite federation", () => {
+  const plan = buildDefaultPlan(environment, cliOptions);
+  plan.intent = "microfrontend-system";
+  plan.architecture = "microfrontend";
+  plan.workspace.microfrontendStrategy = "single-spa";
+
+  const result = normalizeProjectPlan(plan, environment);
+
+  assert.equal(result.plan.workspace.microfrontendStrategy, "vite-federation");
+  assert.match(result.warnings.join(" "), /switching strategy to vite-federation/i);
+});
+
 test("microfrontend plans normalize to supported frontend scaffolds", () => {
   const plan = buildDefaultPlan(environment, cliOptions);
   plan.intent = "microfrontend-system";

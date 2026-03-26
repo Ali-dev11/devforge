@@ -22,6 +22,7 @@ import {
   STATE_CHOICES,
   STRICTNESS_CHOICES,
   STYLING_CHOICES,
+  SUPPORTED_MICROFRONTEND_STRATEGIES,
   TEMPLATE_TIER_CHOICES,
   TEST_ENVIRONMENT_CHOICES,
   TEST_RUNNER_CHOICES,
@@ -55,9 +56,9 @@ function defaultTooling(): ToolingConfig {
     eslintProfile: "moderate",
     prettier: true,
     prettierProfile: "moderate",
-    husky: true,
+    husky: false,
     huskyProfile: "moderate",
-    commitlint: true,
+    commitlint: false,
     docker: false,
     githubActions: true,
   };
@@ -262,6 +263,18 @@ function getOrmChoicesForBackend(
   }
 
   return ORM_CHOICES;
+}
+
+function getSupportedMicrofrontendStrategyChoices(): Array<{
+  title: string;
+  value: NonNullable<ProjectPlan["workspace"]["microfrontendStrategy"]>;
+}> {
+  return MICROFRONTEND_STRATEGY_CHOICES.filter(
+    (choice): choice is {
+      title: string;
+      value: NonNullable<ProjectPlan["workspace"]["microfrontendStrategy"]>;
+    } => SUPPORTED_MICROFRONTEND_STRATEGIES.includes(choice.value),
+  );
 }
 
 export function getArchitectureChoicesForIntent(
@@ -738,15 +751,16 @@ export async function collectProjectPlan(
   }
 
   if (plan.intent === "microfrontend-system" || plan.architecture === "microfrontend") {
+    const microfrontendStrategyChoices = getSupportedMicrofrontendStrategyChoices();
     const microAnswers = await prompts(
       [
         {
-          type: "select",
+          type: microfrontendStrategyChoices.length > 1 ? "select" : null,
           name: "microfrontendStrategy",
           message: "Microfrontend strategy",
-          choices: MICROFRONTEND_STRATEGY_CHOICES,
+          choices: microfrontendStrategyChoices,
           initial: getInitialChoiceIndex(
-            MICROFRONTEND_STRATEGY_CHOICES,
+            microfrontendStrategyChoices,
             plan.workspace.microfrontendStrategy,
           ),
         },
@@ -761,7 +775,7 @@ export async function collectProjectPlan(
     );
 
     plan.workspace.microfrontendStrategy =
-      microAnswers.microfrontendStrategy ?? "vite-federation";
+      microAnswers.microfrontendStrategy ?? microfrontendStrategyChoices[0]?.value ?? "vite-federation";
     plan.workspace.remoteApps = dedupe(
       String(microAnswers.remoteApps ?? "")
         .split(",")

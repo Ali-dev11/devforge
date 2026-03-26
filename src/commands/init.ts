@@ -78,7 +78,11 @@ export async function runInitCommand(options: CliOptions): Promise<void> {
     },
   });
 
-  const installResult = runInstallers(plan, environment, options.skipInstall);
+  const installResult = runInstallers(plan, environment, options.skipInstall, {
+    onStep(message) {
+      step(message);
+    },
+  });
 
   if (plan.git.setupSsh) {
     warn("SSH setup was requested; DevForge generated guidance in the README instead of editing system SSH config.");

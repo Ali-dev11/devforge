@@ -1,77 +1,87 @@
 # DevForge CLI
 
-DevForge CLI is a production-focused, AI-native scaffolding tool for modern JavaScript and TypeScript applications. It helps teams move from project intent to a documented, installable repository with architecture guidance, AI assistant rules, testing setup, release hygiene, and baseline tooling already in place.
+DevForge CLI is an AI-native scaffolding tool for JavaScript and TypeScript teams that want more than a blank starter. It turns project intent into a runnable repository with architecture guidance, starter surfaces, testing setup, AI rules, repository hygiene, and contributor docs already in place.
 
-## Why DevForge
+## Why DevForge Exists
 
-Starting a new project usually means repeating the same setup work: choosing frameworks, wiring testing, adding linting, deciding on architecture, documenting the stack, and aligning AI assistants with team standards. DevForge turns that setup phase into a guided flow that produces a repo your team can actually build on.
+Most new projects lose time before real product work even starts. Teams repeat the same setup decisions around frameworks, package managers, testing, linting, formatting, release hygiene, CI, and AI tooling. DevForge compresses that setup phase into one guided flow and outputs a repository that already explains itself.
 
 DevForge helps you:
 
-- reduce setup time for frontend, backend, fullstack, microfrontend, extension, and CLI projects
-- avoid invalid stack combinations through built-in normalization and compatibility rules
-- start with generated docs, health surfaces, project metadata, and repository hygiene from day one
-- configure AI tools like Cursor, Claude, and Codex with stack-aware rule packs
-- standardize project creation across teams, internal tools, client work, and experiments
+- move from idea to runnable repo faster
+- avoid invalid stack combinations before they land in code
+- start with project docs, starter surfaces, and contributor files on day one
+- standardize scaffolding across personal projects, internal tooling, and client work
+- keep Cursor, Claude, and Codex aligned with the selected stack through generated rules
 
-## What You Get
+## What It Generates
 
-- intent-driven scaffolding for landing pages, frontend apps, backend APIs, fullstack apps, microfrontends, Chrome extensions, and CLI tools
-- environment-aware setup for Node.js and package manager selection
-- configurable ESLint, Prettier, and Husky strictness profiles
-- testing setup prompts for Vitest, Jest, Playwright, Cypress, `node`, `jsdom`, and `happy-dom`
-- frontend state and data choices including Redux Toolkit, MobX, Jotai, TanStack Query, RTK Query, and more
-- generated docs, AI rules, CI, contribution files, and release-ready repository hygiene
-
-## Generated Starter Experience
-
-DevForge does not stop at writing config files. Fresh projects include meaningful starter surfaces so the generated app explains itself:
-
-- frontend projects render a project details page with stack information and generator metadata
-- backend projects expose structured metadata from `/` and `/health`
-- fullstack apps ship with a frontend surface and an API health route
-- microfrontends generate a host plus remotes with role-aware starter screens
-- Chrome extensions include popup, background, and content-script starter surfaces
-- CLI projects expose human-readable output and machine-readable `--json` output
+- landing pages, frontend apps, backend APIs, fullstack apps, microfrontend workspaces, Chrome extensions, and CLI tools
+- project-detail starter UIs for frontend surfaces
+- metadata and health endpoints for backend and fullstack APIs
+- AI rule outputs for Cursor, Claude, Codex, and `AGENTS.md`
+- testing setup for Vitest, Jest, Playwright, and Cypress
+- optional ESLint, Prettier, Husky, Commitlint, Docker, and GitHub Actions setup
+- generated docs, changelog-ready project metadata, and baseline repository hygiene
 
 ## Quick Start
 
-Run without installing globally:
+Run without a global install:
 
 ```bash
-npx @ali-dev11/devforge@latest
+npx --yes @ali-dev11/devforge@latest
 ```
 
 Global install:
 
 ```bash
 npm install -g @ali-dev11/devforge
-create-devforge
-# or
 devforge
 ```
 
-## Local Development
+## What The CLI Asks You
 
-```bash
-npm install
-npm run check
-npm run build
-node dist/bin/devforge.js --help
-node dist/bin/devforge.js init
-```
+DevForge keeps core setup decisions required, and pushes the rest behind optional customization steps.
 
-## Release History And Docs
+- Always asked: project name, output directory, Node strategy, package manager, project intent, architecture when there is more than one valid choice, and stack-specific core choices like framework or backend language.
+- Asked only when you opt in to customization: frontend libraries, backend capabilities, testing details, AI rule details, linting/formatting/hooks, and extra DevOps tooling.
 
-- [Documentation Site](https://ali-dev11.github.io/devforge/)
-- [Docs Overview](./docs/overview.md)
-- [Changelog](./CHANGELOG.md)
-- [GitHub Releases](https://github.com/Ali-dev11/devforge/releases)
-- [GitHub Pages Changelog](https://ali-dev11.github.io/devforge/changelog.html)
+## Prompt Guide
+
+Every prompt in DevForge exists to answer one of four questions: where the project should live, what kind of product is being created, which stack should power it, and how much team/process setup should be generated from day one.
+
+- `Project name`: becomes the generated package or workspace name and is reused in starter screens, docs, and metadata.
+- `Output directory`: tells DevForge where to write files. It is needed so the generator knows which folder to create or validate before writing.
+- `Node.js version`: controls whether the scaffold follows the current LTS track, the latest available release, or a custom pinned version for stricter team environments.
+- `Package manager`: chooses the lockfile, install command, and workspace behavior for the generated project.
+- `What are you building?`: decides the entire downstream flow, including whether DevForge asks frontend, backend, extension, CLI, or workspace-specific questions.
+- `Architecture style`: determines whether the output is a single app, a modular codebase, a monorepo, or a microfrontend workspace when that makes sense for the selected intent.
+- `Template tier`: controls how much baseline setup and production-minded structure the scaffold should include.
+
+The full prompt-by-prompt guide is here:
+
+- [Prompt Reference](./docs/prompts.md)
+
+## Default Versus Optional Tooling
+
+- ESLint: enabled by default because most teams want lint feedback immediately.
+- Prettier: enabled by default so formatting stays consistent across humans and AI tools.
+- Husky: optional and off by default because local git hooks are team-policy dependent.
+- Commitlint: optional and off by default unless you explicitly want commit-message enforcement.
+- Docker and generated GitHub Actions: optional, depending on whether the project needs containerization or repo-level automation from day one.
+
+## How DevForge Helps In Practice
+
+- For frontend teams, it creates a visible starter surface that shows the selected stack, project metadata, and generator details.
+- For backend teams, it exposes structured metadata and health endpoints so the scaffold is immediately inspectable.
+- For fullstack teams, it gives you both a frontend shell and an API surface instead of only config files.
+- For platform teams, it creates repeatable project conventions around docs, testing, and AI rules.
+- For public packages and client work, it reduces “first week” setup drift and gives contributors a clearer starting point.
 
 ## Development Commands
 
 ```bash
+npm install
 npm run lint
 npm run typecheck
 npm run test
@@ -82,16 +92,30 @@ npm run smoke
 npm run runtime:matrix -- --scenario backend-hono --scenario cli-tool
 ```
 
-## Documentation
+## Why These Commands Matter
 
+- `npm install` installs local development dependencies for the DevForge repository itself.
+- `npm run lint` checks repository code quality rules.
+- `npm run typecheck` validates the TypeScript source without emitting build output.
+- `npm run test` runs regression coverage for prompts, normalization, generator output, changelog rendering, and runtime-matrix coverage.
+- `npm run build` compiles the CLI into `dist/` so the published package and smoke runs use built artifacts.
+- `npm run check` is the main contributor safety command because it combines linting, typechecking, tests, and build verification.
+- `npm run docs:changelog` refreshes the GitHub Pages changelog page from `CHANGELOG.md`.
+- `npm run smoke` verifies a non-interactive scaffold run end to end.
+- `npm run runtime:matrix -- --scenario ...` installs, builds, and verifies generated projects so the scaffold output is tested as a product, not just as source code.
+
+## Repository Docs
+
+- [Documentation Site](https://ali-dev11.github.io/devforge/)
 - [Docs Home](./docs/index.md)
-- [Changelog Page](./docs/changelog.md)
+- [Prompt Reference](./docs/prompts.md)
 - [Overview](./docs/overview.md)
 - [Architecture](./docs/architecture.md)
 - [Development](./docs/development.md)
 - [Generated Output](./docs/generated-output.md)
-- [Contributing](./CONTRIBUTING.md)
-- [Docs Contributing Page](./docs/contributing.md)
+- [Changelog](./CHANGELOG.md)
+- [GitHub Releases](https://github.com/Ali-dev11/devforge/releases)
+- [GitHub Pages Changelog](https://ali-dev11.github.io/devforge/changelog.html)
 
 ## Community Health
 
@@ -105,13 +129,14 @@ npm run runtime:matrix -- --scenario backend-hono --scenario cli-tool
 
 ## Repository Structure
 
-- `src/cli.ts`: argument parsing and command dispatch
-- `src/commands/init.ts`: orchestration for the init flow
-- `src/engines/`: environment detection, prompts, normalization, generation, install hooks, AI rules
-- `src/templates.ts`: generated file content and project docs
-- `src/devforge-rules.ts`: DevForge-curated AI rule pack mapping
-- `test/`: regression tests
-- `docs/`: product, architecture, and contribution documentation
+- `src/cli.ts` handles argument parsing and command dispatch.
+- `src/commands/init.ts` orchestrates the interactive initialization flow.
+- `src/engines/` contains environment detection, prompting, normalization, generation, installation, and AI rule logic.
+- `src/templates.ts` defines generated project files, starter surfaces, and generated docs.
+- `src/runtime-matrix.ts` verifies generated project installs, builds, and runtime behavior.
+- `src/devforge-rules.ts` maps stack choices to DevForge-curated AI rule packs.
+- `docs/` powers the public documentation site.
+- `test/` covers generator behavior, decision normalization, changelog rendering, and runtime-matrix coverage.
 
 ## License
 

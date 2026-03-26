@@ -46,6 +46,9 @@ test("generator returns a runnable default frontend scaffold", () => {
   const packageJson = JSON.parse(packageJsonFile.content) as {
     scripts: Record<string, string>;
     engines: Record<string, string>;
+    pnpm?: {
+      onlyBuiltDependencies?: string[];
+    };
   };
 
   assert.ok(paths.has("package.json"));
@@ -62,10 +65,17 @@ test("generator returns a runnable default frontend scaffold", () => {
     "eslint . && tsc -p tsconfig.json --noEmit && prettier --check . && vite build && vitest run",
   );
   assert.equal(packageJson.engines.node, ">=20.19.0 || >=22.12.0");
+  assert.deepEqual(packageJson.pnpm?.onlyBuiltDependencies, ["esbuild"]);
   assert.match(readmeFile.content, /Quick Start/);
   assert.match(readmeFile.content, /Common Commands/);
+  assert.match(readmeFile.content, /Command Guide/);
+  assert.match(readmeFile.content, /Tooling Defaults/);
   assert.match(appFile.content, /Project details/);
   assert.match(appFile.content, /Created by Ali-dev11 via @ali-dev11\/devforge/);
+  assert.match(
+    files.find((file) => file.path === "vite.config.ts")?.content ?? "",
+    /@tailwindcss\/vite/,
+  );
 });
 
 test("fullstack scripts honor the selected package manager", () => {
@@ -147,18 +157,38 @@ test("microfrontend scaffolds skip generic workspace apps and include packageMan
   const rootPackageJson = JSON.parse(rootPackageJsonFile.content) as {
     packageManager: string;
   };
+  const hostPackageJson = JSON.parse(
+    files.find((file) => file.path === "apps/host/package.json")?.content ?? "{}",
+  ) as {
+    scripts: Record<string, string>;
+  };
+  const remotePackageJson = JSON.parse(
+    files.find((file) => file.path === "apps/remote-catalog/package.json")?.content ?? "{}",
+  ) as {
+    scripts: Record<string, string>;
+  };
 
   assert.equal(rootPackageJson.packageManager, "pnpm@9.0.0");
   assert.ok(paths.has("apps/host/package.json"));
   assert.ok(paths.has("apps/remote-catalog/package.json"));
   assert.ok(paths.has("apps/remote-dashboard/package.json"));
+  assert.equal(hostPackageJson.scripts.dev, "vite --host 127.0.0.1 --port 4173 --strictPort");
+  assert.match(remotePackageJson.scripts.dev, /vite build --watch/);
   assert.match(
-    files.find((file) => file.path === "apps/host/src/App.tsx")?.content ?? "",
-    /Microfrontend host/,
+    files.find((file) => file.path === "apps/host/vite.config.ts")?.content ?? "",
+    /@originjs\/vite-plugin-federation/,
   );
   assert.match(
-    files.find((file) => file.path === "apps/remote-catalog/src/App.tsx")?.content ?? "",
-    /Remote app/,
+    files.find((file) => file.path === "apps/host/vite.config.ts")?.content ?? "",
+    /http:\/\/127\.0\.0\.1:4174\/assets\/remoteEntry\.js/,
+  );
+  assert.match(
+    files.find((file) => file.path === "apps/host/src/App.tsx")?.content ?? "",
+    /Load remote/,
+  );
+  assert.match(
+    files.find((file) => file.path === "apps/remote-catalog/src/RemoteApp.tsx")?.content ?? "",
+    /Federated remote/,
   );
   assert.equal(paths.has("apps/web/package.json"), false);
 });

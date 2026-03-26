@@ -3,6 +3,10 @@ import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import type { EnvironmentInfo, InstallResult, ProjectPlan } from "../types.js";
 
+type InstallerHooks = {
+  onStep?: (message: string) => void;
+};
+
 type CommandResult = {
   ok: boolean;
   output?: string;
@@ -125,6 +129,7 @@ export function runInstallers(
   plan: ProjectPlan,
   environment: EnvironmentInfo,
   skipInstall: boolean,
+  hooks?: InstallerHooks,
 ): InstallResult {
   const executed: string[] = [];
   const skipped: string[] = [];
@@ -137,6 +142,7 @@ export function runInstallers(
         `${plan.packageManager} is not installed and Corepack is unavailable; generated project without installing dependencies.`,
       );
     } else {
+      hooks?.onStep?.(`Installing dependencies with ${invocation.label}`);
       removeIncompatibleLockfiles(plan.targetDir, plan.packageManager);
       const installResult = runCommand(
         invocation.command,
@@ -160,6 +166,7 @@ export function runInstallers(
   }
 
   if (plan.git.initialize) {
+    hooks?.onStep?.("Initializing git repository");
     if (runCommand("git", ["init"], plan.targetDir).ok) {
       executed.push("git init");
     } else {
@@ -167,6 +174,7 @@ export function runInstallers(
     }
 
     if (plan.git.addRemote && plan.git.remoteUrl) {
+      hooks?.onStep?.("Adding git remote origin");
       if (runCommand("git", ["remote", "add", "origin", plan.git.remoteUrl], plan.targetDir).ok) {
         executed.push("git remote add origin");
       } else {

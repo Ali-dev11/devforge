@@ -242,8 +242,12 @@ export const MICROFRONTEND_STRATEGY_CHOICES: Array<{
   value: MicrofrontendStrategy;
 }> = [
   { title: "Module Federation", value: "module-federation" },
-  { title: "Vite Federation", value: "vite-federation" },
+  { title: "Vite Federation (supported)", value: "vite-federation" },
   { title: "Single-SPA", value: "single-spa" },
+];
+
+export const SUPPORTED_MICROFRONTEND_STRATEGIES: MicrofrontendStrategy[] = [
+  "vite-federation",
 ];
 
 export const EXTENSION_FLAVOR_CHOICES: Array<{

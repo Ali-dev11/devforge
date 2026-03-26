@@ -22,6 +22,9 @@ type PackageJsonShape = {
   private?: boolean;
   type?: "module";
   packageManager?: string;
+  pnpm?: {
+    onlyBuiltDependencies?: string[];
+  };
   scripts?: Record<string, string>;
   workspaces?: string[];
   dependencies?: Record<string, string>;
@@ -47,6 +50,31 @@ function stringifyJson(data: unknown): string {
 
 function makeFile(path: string, content: string, executable = false): GeneratedFile {
   return { path, content, executable };
+}
+
+function pnpmPackageConfig(plan: ProjectPlan): PackageJsonShape["pnpm"] | undefined {
+  if (
+    plan.packageManager === "pnpm" &&
+    (Boolean(plan.frontend) || plan.intent === "chrome-extension" || plan.architecture === "microfrontend")
+  ) {
+    return {
+      onlyBuiltDependencies: ["esbuild"],
+    };
+  }
+
+  return undefined;
+}
+
+function microfrontendPort(index: number): number {
+  return 4173 + index;
+}
+
+function microfrontendRemoteModuleName(remoteApp: string): string {
+  return `remote_${remoteApp.replace(/-/g, "_")}`;
+}
+
+function microfrontendRemoteEntryUrl(port: number): string {
+  return `http://127.0.0.1:${port}/assets/remoteEntry.js`;
 }
 
 function isReactLike(plan: ProjectPlan): boolean {
@@ -531,6 +559,11 @@ function readme(plan: ProjectPlan): string {
     scripts.build ? packageManagerRunCommand(plan.packageManager, "build") : undefined,
     scripts.check ? packageManagerRunCommand(plan.packageManager, "check") : undefined,
   ].filter(Boolean) as string[];
+  const testCommand = scripts.test
+    ? packageManagerRunCommand(plan.packageManager, "test")
+    : scripts["test:e2e"]
+      ? packageManagerRunCommand(plan.packageManager, "test:e2e")
+      : undefined;
   const structure =
     plan.architecture === "monorepo" || plan.architecture === "microfrontend"
       ? ["- `apps/`: runnable applications", "- `packages/`: shared code", "- `docs/`: generated project documentation"]
@@ -564,7 +597,28 @@ function readme(plan: ProjectPlan): string {
     "## Common Commands",
     "```bash",
     ...scriptCommands,
+    ...(testCommand ? [testCommand] : []),
     "```",
+    "",
+    "## Command Guide",
+    scriptCommands[0]
+      ? `- \`${scriptCommands[0]}\` starts the local development surface so you can inspect the generated app, API, workspace, or CLI wiring immediately.`
+      : undefined,
+    scriptCommands[1]
+      ? `- \`${scriptCommands[1]}\` produces a production build and is the fastest way to catch framework or bundler issues before shipping changes.`
+      : undefined,
+    testCommand
+      ? `- \`${testCommand}\` validates the generated test harness so your project starts with a working quality gate instead of a placeholder script.`
+      : undefined,
+    scriptCommands[2]
+      ? `- \`${scriptCommands[2]}\` runs the scaffold's combined validation flow for linting, type safety, formatting, tests, and build checks where applicable.`
+      : undefined,
+    "",
+    "## Tooling Defaults",
+    `- ESLint: ${plan.tooling.eslint ? `enabled (${plan.tooling.eslintProfile}) to keep code quality guardrails on from day one.` : "disabled. Enable it later if the team wants lint-driven feedback."}`,
+    `- Prettier: ${plan.tooling.prettier ? `enabled (${plan.tooling.prettierProfile}) so formatting stays consistent across contributors and AI assistants.` : "disabled. Add it when the team wants enforced formatting conventions."}`,
+    `- Husky: ${plan.tooling.husky ? `enabled (${plan.tooling.huskyProfile}) to enforce checks before commits land locally.` : "disabled by default because local git hooks are team-policy specific and not every project wants them."}`,
+    `- Commitlint: ${plan.tooling.commitlint ? "enabled to keep commit messages consistent with release tooling." : "disabled unless you explicitly opt into commit-message enforcement."}`,
     "",
     "## Project Structure",
     ...structure,
@@ -607,6 +661,11 @@ function gettingStartedDoc(plan: ProjectPlan): string {
     scripts.build ? packageManagerRunCommand(plan.packageManager, "build") : undefined,
     scripts.check ? packageManagerRunCommand(plan.packageManager, "check") : undefined,
   ].filter(Boolean) as string[];
+  const testCommand = scripts.test
+    ? packageManagerRunCommand(plan.packageManager, "test")
+    : scripts["test:e2e"]
+      ? packageManagerRunCommand(plan.packageManager, "test:e2e")
+      : undefined;
 
   return [
     "# Getting Started",
@@ -619,7 +678,22 @@ function gettingStartedDoc(plan: ProjectPlan): string {
     "## Daily Commands",
     "```bash",
     ...scriptCommands,
+    ...(testCommand ? [testCommand] : []),
     "```",
+    "",
+    "## Why These Commands Matter",
+    scriptCommands[0]
+      ? `- \`${scriptCommands[0]}\` is your day-to-day entry point for exploring the generated scaffold and replacing starter content with real features.`
+      : undefined,
+    scriptCommands[1]
+      ? `- \`${scriptCommands[1]}\` checks that production compilation still works before you push or release changes.`
+      : undefined,
+    testCommand
+      ? `- \`${testCommand}\` confirms the generated test setup is still wired correctly after you begin customizing the project.`
+      : undefined,
+    scriptCommands[2]
+      ? `- \`${scriptCommands[2]}\` is the safest pre-push command because it runs the scaffold's combined validation flow.`
+      : undefined,
     "",
     "## What To Tackle First",
     "- Replace starter content and placeholder services.",
@@ -853,11 +927,18 @@ function collectDependencies(plan: ProjectPlan): {
     }
 
     if (plan.frontend.styling === "tailwind-css") {
-      addRecord(devDependencies, {
-        autoprefixer: "latest",
-        postcss: "latest",
-        tailwindcss: "latest",
-      });
+      if (["react-vite", "vue-vite", "svelte", "solidjs"].includes(plan.frontend.framework)) {
+        addRecord(devDependencies, {
+          "@tailwindcss/vite": "latest",
+          tailwindcss: "latest",
+        });
+      } else {
+        addRecord(devDependencies, {
+          "@tailwindcss/postcss": "latest",
+          postcss: "latest",
+          tailwindcss: "latest",
+        });
+      }
     }
 
     if (plan.frontend.styling === "scss") {
@@ -1072,6 +1153,20 @@ function collectDependencies(plan: ProjectPlan): {
         vite: "latest",
       });
     }
+
+    if (plan.frontend?.styling === "tailwind-css") {
+      addRecord(devDependencies, {
+        "@tailwindcss/vite": "latest",
+        tailwindcss: "latest",
+      });
+    }
+  }
+
+  if (plan.architecture === "microfrontend") {
+    addRecord(devDependencies, {
+      "@originjs/vite-plugin-federation": "latest",
+      concurrently: "latest",
+    });
   }
 
   if (plan.tooling.eslint) {
@@ -1348,6 +1443,22 @@ function singlePackageScripts(plan: ProjectPlan): Record<string, string> {
   return appendQualityScripts(plan, scripts);
 }
 
+function microfrontendHostScripts(plan: ProjectPlan, port: number): Record<string, string> {
+  const scripts = singlePackageScripts(plan);
+  scripts.dev = `vite --host 127.0.0.1 --port ${port} --strictPort`;
+  scripts.preview = `vite preview --host 127.0.0.1 --port ${port} --strictPort`;
+  return scripts;
+}
+
+function microfrontendRemoteScripts(plan: ProjectPlan, port: number): Record<string, string> {
+  const scripts = singlePackageScripts(plan);
+  scripts["build:watch"] = "vite build --watch";
+  scripts.dev =
+    `concurrently -k -n build,preview "vite build --watch" "vite preview --host 127.0.0.1 --port ${port} --strictPort"`;
+  scripts.preview = `vite preview --host 127.0.0.1 --port ${port} --strictPort`;
+  return scripts;
+}
+
 function singlePackageJson(
   plan: ProjectPlan,
   packageManagerMetadata: PackageManagerMetadata,
@@ -1359,6 +1470,7 @@ function singlePackageJson(
     private: true,
     type: "module",
     packageManager: packageManagerField(packageManagerMetadata),
+    pnpm: pnpmPackageConfig(plan),
     scripts: sortRecord(singlePackageScripts(plan)),
     engines: {
       node: generatedProjectNodeEngine(plan),
@@ -1372,7 +1484,7 @@ function singlePackageJson(
 
 function styleFileContent(plan: ProjectPlan): string {
   if (plan.frontend?.styling === "tailwind-css") {
-    return ["@tailwind base;", "@tailwind components;", "@tailwind utilities;", ""].join("\n");
+    return ['@import "tailwindcss";', ""].join("\n");
   }
 
   if (plan.frontend?.styling === "scss") {
@@ -1405,11 +1517,46 @@ function styleFileContent(plan: ProjectPlan): string {
   ].join("\n");
 }
 
+function tailwindSupportFiles(plan: ProjectPlan): GeneratedFile[] {
+  if (plan.frontend?.styling !== "tailwind-css") {
+    return [];
+  }
+
+  if (["react-vite", "vue-vite", "svelte", "solidjs"].includes(plan.frontend.framework)) {
+    return [];
+  }
+
+  return [
+    makeFile(
+      "postcss.config.mjs",
+      [
+        "export default {",
+        "  plugins: {",
+        '    "@tailwindcss/postcss": {},',
+        "  },",
+        "};",
+        "",
+      ].join("\n"),
+    ),
+  ];
+}
+
+function viteTailwindPluginImportLines(plan: ProjectPlan): string[] {
+  return plan.frontend?.styling === "tailwind-css"
+    ? ['import tailwindcss from "@tailwindcss/vite";']
+    : [];
+}
+
+function vitePluginExpression(plugins: string[], indent = "  "): string {
+  return `${indent}plugins: [${plugins.join(", ")}],`;
+}
+
 function reactAppSource(plan: ProjectPlan, context?: FrontendSurfaceContext): GeneratedFile[] {
   const frontend = plan.frontend;
   const styleImport =
     frontend?.styling === "scss" ? "./styles.scss" : "./styles.css";
   const surface = frontendSurfaceDetails(plan, context);
+  const pluginLines = ["react()", ...(frontend?.styling === "tailwind-css" ? ["tailwindcss()"] : [])];
 
   const files: GeneratedFile[] = [
     viteEnvTypesFile(),
@@ -1436,9 +1583,10 @@ function reactAppSource(plan: ProjectPlan, context?: FrontendSurfaceContext): Ge
       [
         "import { defineConfig } from \"vite\";",
         "import react from \"@vitejs/plugin-react\";",
+        ...viteTailwindPluginImportLines(plan),
         "",
         "export default defineConfig({",
-        "  plugins: [react()],",
+        vitePluginExpression(pluginLines),
         "});",
         "",
       ].join("\n"),
@@ -1526,6 +1674,8 @@ function reactAppSource(plan: ProjectPlan, context?: FrontendSurfaceContext): Ge
     );
   }
 
+  files.push(...tailwindSupportFiles(plan));
+
   return files;
 }
 
@@ -1602,6 +1752,7 @@ function nextJsSource(plan: ProjectPlan, context?: FrontendSurfaceContext): Gene
       ].join("\n"),
     ),
     makeFile("app/globals.css", styleFileContent(plan)),
+    ...tailwindSupportFiles(plan),
   ];
 }
 
@@ -1668,11 +1819,14 @@ function astroSource(plan: ProjectPlan, context?: FrontendSurfaceContext): Gener
         "",
       ].join("\n"),
     ),
+    ...tailwindSupportFiles(plan),
   ];
 }
 
 function vueSource(plan: ProjectPlan, context?: FrontendSurfaceContext): GeneratedFile[] {
   const surface = frontendSurfaceDetails(plan, context);
+  const pluginLines = ["vue()", ...(plan.frontend?.styling === "tailwind-css" ? ["tailwindcss()"] : [])];
+
   return [
     viteEnvTypesFile(),
     makeFile(
@@ -1698,9 +1852,10 @@ function vueSource(plan: ProjectPlan, context?: FrontendSurfaceContext): Generat
       [
         "import { defineConfig } from \"vite\";",
         "import vue from \"@vitejs/plugin-vue\";",
+        ...viteTailwindPluginImportLines(plan),
         "",
         "export default defineConfig({",
-        "  plugins: [vue()],",
+        vitePluginExpression(pluginLines),
         "});",
         "",
       ].join("\n"),
@@ -1753,6 +1908,7 @@ function vueSource(plan: ProjectPlan, context?: FrontendSurfaceContext): Generat
         "",
       ].join("\n"),
     ),
+    ...tailwindSupportFiles(plan),
   ];
 }
 
@@ -1806,11 +1962,14 @@ function nuxtSource(plan: ProjectPlan, context?: FrontendSurfaceContext): Genera
         "",
       ].join("\n"),
     ),
+    ...tailwindSupportFiles(plan),
   ];
 }
 
 function svelteSource(plan: ProjectPlan, context?: FrontendSurfaceContext): GeneratedFile[] {
   const surface = frontendSurfaceDetails(plan, context);
+  const pluginLines = ["svelte()", ...(plan.frontend?.styling === "tailwind-css" ? ["tailwindcss()"] : [])];
+
   return [
     viteEnvTypesFile(),
     makeFile(
@@ -1836,9 +1995,10 @@ function svelteSource(plan: ProjectPlan, context?: FrontendSurfaceContext): Gene
       [
         "import { defineConfig } from \"vite\";",
         "import { svelte } from \"@sveltejs/vite-plugin-svelte\";",
+        ...viteTailwindPluginImportLines(plan),
         "",
         "export default defineConfig({",
-        "  plugins: [svelte()],",
+        vitePluginExpression(pluginLines),
         "});",
         "",
       ].join("\n"),
@@ -1884,6 +2044,7 @@ function svelteSource(plan: ProjectPlan, context?: FrontendSurfaceContext): Gene
         "",
       ].join("\n"),
     ),
+    ...tailwindSupportFiles(plan),
   ];
 }
 
@@ -1927,11 +2088,14 @@ function svelteKitSource(plan: ProjectPlan, context?: FrontendSurfaceContext): G
         "",
       ].join("\n"),
     ),
+    ...tailwindSupportFiles(plan),
   ];
 }
 
 function solidSource(plan: ProjectPlan, context?: FrontendSurfaceContext): GeneratedFile[] {
   const surface = frontendSurfaceDetails(plan, context);
+  const pluginLines = ["solid()", ...(plan.frontend?.styling === "tailwind-css" ? ["tailwindcss()"] : [])];
+
   return [
     viteEnvTypesFile(),
     makeFile(
@@ -1957,9 +2121,10 @@ function solidSource(plan: ProjectPlan, context?: FrontendSurfaceContext): Gener
       [
         "import { defineConfig } from \"vite\";",
         "import solid from \"vite-plugin-solid\";",
+        ...viteTailwindPluginImportLines(plan),
         "",
         "export default defineConfig({",
-        "  plugins: [solid()],",
+        vitePluginExpression(pluginLines),
         "});",
         "",
       ].join("\n"),
@@ -2003,6 +2168,7 @@ function solidSource(plan: ProjectPlan, context?: FrontendSurfaceContext): Gener
         "",
       ].join("\n"),
     ),
+    ...tailwindSupportFiles(plan),
   ];
 }
 
@@ -2112,6 +2278,7 @@ function remixSource(plan: ProjectPlan, context?: FrontendSurfaceContext): Gener
         "",
       ].join("\n"),
     ),
+    ...tailwindSupportFiles(plan),
   ];
 }
 
@@ -2139,6 +2306,350 @@ function frontendFiles(plan: ProjectPlan, context?: FrontendSurfaceContext): Gen
     default:
       return reactAppSource(plan, context);
   }
+}
+
+function microfrontendHostFiles(
+  plan: ProjectPlan,
+  remoteApps: string[],
+  port: number,
+  context?: FrontendSurfaceContext,
+): GeneratedFile[] {
+  const surface = frontendSurfaceDetails(plan, context);
+  const remotes = remoteApps.map((remoteApp, index) => ({
+    key: remoteApp,
+    title: toTitleCase(remoteApp),
+    moduleName: microfrontendRemoteModuleName(remoteApp),
+    port: microfrontendPort(index + 1),
+    url: `http://127.0.0.1:${microfrontendPort(index + 1)}`,
+    entryUrl: microfrontendRemoteEntryUrl(microfrontendPort(index + 1)),
+  }));
+
+  return [
+    viteEnvTypesFile(),
+    makeFile(
+      "index.html",
+      [
+        "<!doctype html>",
+        "<html lang=\"en\">",
+        "  <head>",
+        "    <meta charset=\"UTF-8\" />",
+        "    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />",
+        `    <title>${toTitleCase(plan.projectName)} Host</title>`,
+        "  </head>",
+        "  <body>",
+        "    <div id=\"root\"></div>",
+        "    <script type=\"module\" src=\"/src/main.tsx\"></script>",
+        "  </body>",
+        "</html>",
+        "",
+      ].join("\n"),
+    ),
+    makeFile(
+      "vite.config.ts",
+      [
+        "import { defineConfig } from \"vite\";",
+        "import react from \"@vitejs/plugin-react\";",
+        'import federation from "@originjs/vite-plugin-federation";',
+        ...viteTailwindPluginImportLines(plan),
+        "",
+        "export default defineConfig({",
+        "  plugins: [",
+        "    react(),",
+        "    federation({",
+        '      name: "host",',
+        "      remotes: {",
+        ...remotes.map((remote) => `        ${remote.moduleName}: ${JSON.stringify(remote.entryUrl)},`),
+        "      },",
+        '      shared: ["react", "react-dom"],',
+        "    }),",
+        ...(plan.frontend?.styling === "tailwind-css" ? ["    tailwindcss(),"] : []),
+        "  ],",
+        "  server: {",
+        '    host: "127.0.0.1",',
+        `    port: ${port},`,
+        "    strictPort: true,",
+        "  },",
+        "  preview: {",
+        '    host: "127.0.0.1",',
+        `    port: ${port},`,
+        "    strictPort: true,",
+        "  },",
+        "  build: {",
+        '    target: "esnext",',
+        "  },",
+        "});",
+        "",
+      ].join("\n"),
+    ),
+    makeFile(
+      "src/federation-remotes.d.ts",
+      [
+        'import type { ComponentType } from "react";',
+        "",
+        ...remotes.flatMap((remote) => [
+          `declare module "${remote.moduleName}/RemoteApp" {`,
+          "  const RemoteApp: ComponentType;",
+          "  export default RemoteApp;",
+          "}",
+          "",
+        ]),
+      ].join("\n"),
+    ),
+    makeFile(
+      "src/main.tsx",
+      [
+        'import React from "react";',
+        'import ReactDOM from "react-dom/client";',
+        'import App from "./App";',
+        'import "./styles.css";',
+        "",
+        'ReactDOM.createRoot(document.getElementById("root")!).render(',
+        "  <React.StrictMode>",
+        "    <App />",
+        "  </React.StrictMode>,",
+        ");",
+        "",
+      ].join("\n"),
+    ),
+    makeFile(
+      "src/App.tsx",
+      [
+        'import { useState } from "react";',
+        'import type { ComponentType } from "react";',
+        "",
+        `const details = ${JSON.stringify(surface.entries, null, 2)};`,
+        `const generatedWith = ${JSON.stringify(generatedWithText())};`,
+        `const remotes = ${JSON.stringify(
+          remotes.map((remote) => ({
+            key: remote.key,
+            title: remote.title,
+            url: remote.url,
+            moduleName: remote.moduleName,
+          })),
+          null,
+          2,
+        )};`,
+        "",
+        'type RemoteStatus = "idle" | "loading" | "ready" | "error";',
+        "",
+        "const remoteLoaders = {",
+        ...remotes.map((remote) => `  ${JSON.stringify(remote.key)}: () => import("${remote.moduleName}/RemoteApp"),`),
+        "} satisfies Record<string, () => Promise<{ default: ComponentType }>>;",
+        "",
+        "export default function App() {",
+        '  const [loadedRemotes, setLoadedRemotes] = useState<Record<string, ComponentType>>({});',
+        '  const [statuses, setStatuses] = useState<Record<string, RemoteStatus>>({});',
+        '  const [errors, setErrors] = useState<Record<string, string>>({});',
+        "",
+        "  async function loadRemote(remoteKey: string) {",
+        '    setStatuses((current) => ({ ...current, [remoteKey]: "loading" }));',
+        '    setErrors((current) => ({ ...current, [remoteKey]: "" }));',
+        "",
+        "    try {",
+        "      const module = await remoteLoaders[remoteKey]();",
+        "      setLoadedRemotes((current) => ({ ...current, [remoteKey]: module.default }));",
+        '      setStatuses((current) => ({ ...current, [remoteKey]: "ready" }));',
+        "    } catch (error) {",
+        "      setLoadedRemotes((current) => {",
+        "        const next = { ...current };",
+        "        delete next[remoteKey];",
+        "        return next;",
+        "      });",
+        '      setStatuses((current) => ({ ...current, [remoteKey]: "error" }));',
+        '      setErrors((current) => ({ ...current, [remoteKey]: error instanceof Error ? error.message : String(error) }));',
+        "    }",
+        "  }",
+        "",
+        "  return (",
+        '    <main style={{ minHeight: "100vh", padding: "3rem 1.5rem", background: "linear-gradient(180deg, #f8f5ef 0%, #efe9dd 100%)", color: "#112233" }}>',
+        '      <section style={{ maxWidth: 1120, margin: "0 auto", display: "grid", gap: 24 }}>',
+        '        <article style={{ padding: 32, borderRadius: 24, background: "rgba(255, 252, 247, 0.92)", border: "1px solid #e4d8c6", boxShadow: "0 24px 80px rgba(17, 34, 51, 0.08)" }}>',
+        '          <p style={{ letterSpacing: "0.18em", textTransform: "uppercase", fontSize: 12, fontWeight: 700, color: "#7d5a32" }}>{' + JSON.stringify(surface.badge) + "}</p>",
+        '          <h1 style={{ margin: "0.35rem 0 0", fontSize: "clamp(2.4rem, 5vw, 4rem)" }}>{' + JSON.stringify(surface.heading) + "}</h1>",
+        '          <p style={{ marginTop: 16, maxWidth: 760, fontSize: 18, lineHeight: 1.7, color: "#3a4856" }}>{' + JSON.stringify(surface.lead) + "}</p>",
+        '          <dl style={{ marginTop: 28, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16 }}>',
+        "            {details.map((detail) => (",
+        '              <div key={detail.label} style={{ margin: 0, padding: 18, borderRadius: 18, border: "1px solid #eadfcd", background: "#fffaf3" }}>',
+        '                <dt style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.12em", color: "#7b6547" }}>{detail.label}</dt>',
+        '                <dd style={{ margin: "0.6rem 0 0", fontSize: 18, fontWeight: 600, color: "#15283b" }}>{detail.value}</dd>',
+        "              </div>",
+        "            ))}",
+        "          </dl>",
+        '          <p style={{ marginTop: 24, fontSize: 14, color: "#6d5a45" }}>{generatedWith}</p>',
+        "        </article>",
+        '        <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 18 }}>',
+        "          {remotes.map((remote) => {",
+        "            const RemoteComponent = loadedRemotes[remote.key];",
+        '            const status = statuses[remote.key] ?? "idle";',
+        "            return (",
+        '              <article key={remote.key} style={{ padding: 22, borderRadius: 20, border: "1px solid #e4d8c6", background: "#fffaf3" }}>',
+        '                <p style={{ margin: 0, textTransform: "uppercase", letterSpacing: "0.12em", fontSize: 11, color: "#7b6547" }}>Remote module</p>',
+        '                <h2 style={{ margin: "0.45rem 0 0", fontSize: 24 }}>{remote.title}</h2>',
+        '                <p style={{ marginTop: 10, color: "#3a4856", lineHeight: 1.6 }}>Load the remote over Vite federation when you are ready to compose it into the host shell.</p>',
+        '                <p style={{ marginTop: 12, fontSize: 13, color: "#6d5a45" }}>Server: {remote.url}</p>',
+        '                <p style={{ marginTop: 4, fontSize: 13, color: "#6d5a45" }}>Module: {remote.moduleName}/RemoteApp</p>',
+        '                <button type="button" onClick={() => void loadRemote(remote.key)} disabled={status === "loading"} style={{ marginTop: 14, border: 0, borderRadius: 999, padding: "0.8rem 1rem", background: "#1f3a5f", color: "#fffaf3", fontWeight: 700, cursor: "pointer" }}>{status === "loading" ? "Loading..." : RemoteComponent ? "Reload remote" : "Load remote"}</button>',
+        '                {status === "error" ? <p style={{ marginTop: 12, color: "#a33b2b", fontSize: 14 }}>Remote unavailable: {errors[remote.key]}</p> : null}',
+        '                {RemoteComponent ? <div style={{ marginTop: 16 }}><RemoteComponent /></div> : null}',
+        "              </article>",
+        "            );",
+        "          })}",
+        "        </section>",
+        "      </section>",
+        "    </main>",
+        "  );",
+        "}",
+        "",
+      ].join("\n"),
+    ),
+    makeFile(
+      plan.frontend?.styling === "scss" ? "src/styles.scss" : "src/styles.css",
+      styleFileContent(plan),
+    ),
+    ...tailwindSupportFiles(plan),
+  ];
+}
+
+function microfrontendRemoteFiles(
+  plan: ProjectPlan,
+  remoteApp: string,
+  port: number,
+  context?: FrontendSurfaceContext,
+): GeneratedFile[] {
+  const surface = frontendSurfaceDetails(plan, context);
+  const moduleName = microfrontendRemoteModuleName(remoteApp);
+
+  return [
+    viteEnvTypesFile(),
+    makeFile(
+      "index.html",
+      [
+        "<!doctype html>",
+        "<html lang=\"en\">",
+        "  <head>",
+        "    <meta charset=\"UTF-8\" />",
+        "    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />",
+        `    <title>${toTitleCase(remoteApp)} Remote</title>`,
+        "  </head>",
+        "  <body>",
+        "    <div id=\"root\"></div>",
+        "    <script type=\"module\" src=\"/src/main.tsx\"></script>",
+        "  </body>",
+        "</html>",
+        "",
+      ].join("\n"),
+    ),
+    makeFile(
+      "vite.config.ts",
+      [
+        'import { defineConfig } from "vite";',
+        'import react from "@vitejs/plugin-react";',
+        'import federation from "@originjs/vite-plugin-federation";',
+        ...viteTailwindPluginImportLines(plan),
+        "",
+        "export default defineConfig({",
+        "  plugins: [",
+        "    react(),",
+        "    federation({",
+        `      name: ${JSON.stringify(moduleName)},`,
+        '      filename: "remoteEntry.js",',
+        "      exposes: {",
+        '        "./RemoteApp": "./src/RemoteApp.tsx",',
+        "      },",
+        '      shared: ["react", "react-dom"],',
+        "    }),",
+        ...(plan.frontend?.styling === "tailwind-css" ? ["    tailwindcss(),"] : []),
+        "  ],",
+        "  server: {",
+        '    host: "127.0.0.1",',
+        `    port: ${port},`,
+        "    strictPort: true,",
+        "  },",
+        "  preview: {",
+        '    host: "127.0.0.1",',
+        `    port: ${port},`,
+        "    strictPort: true,",
+        "  },",
+        "  build: {",
+        '    target: "esnext",',
+        "    modulePreload: false,",
+        "    cssCodeSplit: false,",
+        "  },",
+        "});",
+        "",
+      ].join("\n"),
+    ),
+    makeFile(
+      "src/main.tsx",
+      [
+        'import React from "react";',
+        'import ReactDOM from "react-dom/client";',
+        'import App from "./App";',
+        'import "./styles.css";',
+        "",
+        'ReactDOM.createRoot(document.getElementById("root")!).render(',
+        "  <React.StrictMode>",
+        "    <App />",
+        "  </React.StrictMode>,",
+        ");",
+        "",
+      ].join("\n"),
+    ),
+    makeFile(
+      "src/RemoteApp.tsx",
+      [
+        "export default function RemoteApp() {",
+        "  return (",
+        '    <section style={{ padding: 18, borderRadius: 18, border: "1px solid #eadfcd", background: "#fffaf3" }}>',
+        '      <p style={{ margin: 0, textTransform: "uppercase", letterSpacing: "0.12em", fontSize: 11, color: "#7b6547" }}>Federated remote</p>',
+        `      <h3 style={{ margin: "0.4rem 0 0", fontSize: 22 }}>${toTitleCase(remoteApp)}</h3>`,
+        `      <p style={{ marginTop: 10, lineHeight: 1.6, color: "#3a4856" }}>Exposed as ${moduleName}/RemoteApp for the host shell.</p>`,
+        "    </section>",
+        "  );",
+        "}",
+        "",
+      ].join("\n"),
+    ),
+    makeFile(
+      "src/App.tsx",
+      [
+        'import RemoteApp from "./RemoteApp";',
+        "",
+        `const details = ${JSON.stringify(surface.entries, null, 2)};`,
+        `const generatedWith = ${JSON.stringify(generatedWithText())};`,
+        "",
+        "export default function App() {",
+        "  return (",
+        '    <main style={{ minHeight: "100vh", padding: "3rem 1.5rem", background: "linear-gradient(180deg, #f8f5ef 0%, #efe9dd 100%)", color: "#112233" }}>',
+        '      <section style={{ maxWidth: 960, margin: "0 auto", display: "grid", gap: 20 }}>',
+        '        <article style={{ padding: 32, borderRadius: 24, background: "rgba(255, 252, 247, 0.92)", border: "1px solid #e4d8c6", boxShadow: "0 24px 80px rgba(17, 34, 51, 0.08)" }}>',
+        '          <p style={{ letterSpacing: "0.18em", textTransform: "uppercase", fontSize: 12, fontWeight: 700, color: "#7d5a32" }}>{' + JSON.stringify(surface.badge) + "}</p>",
+        '          <h1 style={{ margin: "0.35rem 0 0", fontSize: "clamp(2.2rem, 5vw, 3.6rem)" }}>{' + JSON.stringify(surface.heading) + "}</h1>",
+        '          <p style={{ marginTop: 16, maxWidth: 720, fontSize: 18, lineHeight: 1.7, color: "#3a4856" }}>{' + JSON.stringify(surface.lead) + "}</p>",
+        '          <dl style={{ marginTop: 28, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16 }}>',
+        "            {details.map((detail) => (",
+        '              <div key={detail.label} style={{ margin: 0, padding: 18, borderRadius: 18, border: "1px solid #eadfcd", background: "#fffaf3" }}>',
+        '                <dt style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.12em", color: "#7b6547" }}>{detail.label}</dt>',
+        '                <dd style={{ margin: "0.6rem 0 0", fontSize: 18, fontWeight: 600, color: "#15283b" }}>{detail.value}</dd>',
+        "              </div>",
+        "            ))}",
+        "          </dl>",
+        '          <p style={{ marginTop: 24, fontSize: 14, color: "#6d5a45" }}>{generatedWith}</p>',
+        "        </article>",
+        "        <RemoteApp />",
+        "      </section>",
+        "    </main>",
+        "  );",
+        "}",
+        "",
+      ].join("\n"),
+    ),
+    makeFile(
+      plan.frontend?.styling === "scss" ? "src/styles.scss" : "src/styles.css",
+      styleFileContent(plan),
+    ),
+    ...tailwindSupportFiles(plan),
+  ];
 }
 
 function backendServerSource(plan: ProjectPlan): string {
@@ -3056,6 +3567,7 @@ function workspaceRootPackageJson(
     private: true,
     type: "module",
     packageManager: packageManagerField(packageManagerMetadata),
+    pnpm: pnpmPackageConfig(plan),
     workspaces: ["apps/*", "packages/*"],
     scripts: sortRecord(appendQualityScripts(plan, scripts)),
     engines: {
@@ -3214,6 +3726,7 @@ function microfrontendFiles(
   plan: ProjectPlan,
   packageManagerMetadata: PackageManagerMetadata,
 ): GeneratedFile[] {
+  const hostPort = microfrontendPort(0);
   const workspacePlan: ProjectPlan = {
     ...plan,
     architecture: "microfrontend",
@@ -3272,7 +3785,8 @@ function microfrontendFiles(
         private: true,
         type: "module",
         packageManager: packageManagerField(packageManagerMetadata),
-        scripts: sortRecord(singlePackageScripts(hostPlan)),
+        pnpm: pnpmPackageConfig(hostPlan),
+        scripts: sortRecord(microfrontendHostScripts(hostPlan, hostPort)),
         dependencies: sortRecord(collectDependencies(hostPlan).dependencies),
         devDependencies: sortRecord(collectDependencies(hostPlan).devDependencies),
       }),
@@ -3285,7 +3799,11 @@ function microfrontendFiles(
   files.push(
     ...prefixFiles(
       "apps/host",
-      frontendFiles(hostPlan, {
+      microfrontendHostFiles(
+        hostPlan,
+        workspacePlan.workspace.remoteApps,
+        hostPort,
+        {
         badge: "Microfrontend host",
         heading: `${toTitleCase(workspacePlan.projectName)} Host`,
         lead: `${workspacePlan.metadata.description} This host app is ready to orchestrate shared navigation and remote composition.`,
@@ -3300,11 +3818,13 @@ function microfrontendFiles(
             value: workspacePlan.workspace.remoteApps.join(", "),
           },
         ],
-      }),
+      },
+      ),
     ),
   );
 
-  for (const remoteApp of workspacePlan.workspace.remoteApps) {
+  for (const [remoteIndex, remoteApp] of workspacePlan.workspace.remoteApps.entries()) {
+    const remotePort = microfrontendPort(remoteIndex + 1);
     const remotePlan = {
       ...hostPlan,
       projectName: `${workspacePlan.projectName}-${remoteApp}`,
@@ -3319,7 +3839,8 @@ function microfrontendFiles(
           private: true,
           type: "module",
           packageManager: packageManagerField(packageManagerMetadata),
-          scripts: sortRecord(singlePackageScripts(remotePlan)),
+          pnpm: pnpmPackageConfig(remotePlan),
+          scripts: sortRecord(microfrontendRemoteScripts(remotePlan, remotePort)),
           dependencies: sortRecord(collectDependencies(remotePlan).dependencies),
           devDependencies: sortRecord(collectDependencies(remotePlan).devDependencies),
         }),
@@ -3338,13 +3859,14 @@ function microfrontendFiles(
     files.push(
       ...prefixFiles(
         `apps/remote-${remoteApp}`,
-        frontendFiles(remotePlan, {
+        microfrontendRemoteFiles(remotePlan, remoteApp, remotePort, {
           badge: "Microfrontend remote",
           heading: `${toTitleCase(remoteApp)} Remote`,
           lead: `${workspacePlan.metadata.description} This remote is ready to expose features back to the host application.`,
           extraDetails: [
             { label: "Role", value: "Remote app" },
             { label: "Remote key", value: remoteApp },
+            { label: "Server", value: `http://127.0.0.1:${remotePort}` },
             {
               label: "Strategy",
               value: toTitleCase(workspacePlan.workspace.microfrontendStrategy ?? "vite-federation"),

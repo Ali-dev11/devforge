@@ -420,6 +420,35 @@ async function verifyPreviewRuntime(
   );
 }
 
+async function verifyScriptRuntime(
+  context: ScenarioExecutionContext,
+  command: {
+    cwd?: string;
+    script: string;
+    env?: Record<string, string | undefined>;
+  },
+  targets: Array<{ url: string; expectations?: string[] }>,
+): Promise<void> {
+  const cwd = command.cwd ? join(context.targetDir, command.cwd) : context.targetDir;
+  const started = startProcess("npm", ["run", command.script], cwd, command.env);
+
+  try {
+    for (const target of targets) {
+      await waitForHttpText(target.url, target.expectations ?? []);
+    }
+  } catch (error) {
+    throw new Error(
+      [
+        error instanceof Error ? error.message : String(error),
+        `Last process logs for ${started.command}:`,
+        lastLogs(started.logs) || "(no process output captured)",
+      ].join("\n"),
+    );
+  } finally {
+    await stopProcess(started);
+  }
+}
+
 async function verifyApiRuntime(
   context: ScenarioExecutionContext,
   command: { cwd?: string; script: string; path: string },
@@ -917,14 +946,11 @@ export const runtimeScenarios: RuntimeScenario[] = [
       plan.workspace.remoteApps = ["catalog", "dashboard"];
     },
     runVerification(context) {
-      return verifyPreviewRuntime(
-        context,
-        {
-          cwd: "apps/host",
-          args: ["preview", "--", "--host", "127.0.0.1", "--port", String(context.port)],
-        },
-        [],
-      );
+      return verifyScriptRuntime(context, { script: "dev" }, [
+        { url: "http://127.0.0.1:4173/" },
+        { url: "http://127.0.0.1:4174/assets/remoteEntry.js" },
+        { url: "http://127.0.0.1:4175/assets/remoteEntry.js" },
+      ]);
     },
   },
   {

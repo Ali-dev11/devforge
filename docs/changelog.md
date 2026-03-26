@@ -9,6 +9,27 @@ Track what changed in DevForge CLI across releases, including scaffolding behavi
 - [GitHub Releases](https://github.com/Ali-dev11/devforge/releases)
 - [Repository Changelog](https://github.com/Ali-dev11/devforge/blob/main/CHANGELOG.md)
 
+## [0.4.0] - 2026-03-26
+
+### Added
+
+- Added repository hardening files and workflows: `CODEOWNERS`, Dependabot configuration, a pull-request dependency review workflow, and GitHub release artifact attestations.
+- Added generated README and getting-started command guides that explain what each common command does and why it matters.
+- Added a dedicated prompt reference page so users can understand what each CLI question changes and why DevForge asks it.
+
+### Changed
+
+- Refreshed the public README and documentation site with clearer positioning, stronger command explanations, and clearer guidance around default versus optional tooling.
+- Made Husky and Commitlint opt-in defaults, while keeping ESLint and Prettier enabled as the baseline quality setup.
+- Narrowed generated microfrontend strategy support to the currently implemented Vite federation flow so prompts and normalization no longer imply unsupported runtime behavior.
+
+### Fixed
+
+- Reworked generated microfrontend workspaces to use a federation-aware host and remote setup with stable ports, remote entry exposure, and a dev workflow that no longer races three generic Vite apps against each other.
+- Improved installer UX by surfacing explicit progress steps before dependency installation and git setup begin.
+- Added pnpm build-approval hints for browser-oriented scaffolds so common `esbuild` installs no longer stop at an approval warning on fresh pnpm setups.
+- Updated generated Tailwind Vite scaffolds to use the current Tailwind package integration instead of writing unprocessed `@tailwind` directives without the required plugin setup.
+
 ## [0.3.4] - 2026-03-26
 
 ### Changed

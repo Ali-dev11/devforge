@@ -2,6 +2,7 @@ import {
   DEFAULT_REMOTE_APPS,
   DEFAULT_RULE_CATEGORIES,
   REACT_FAMILY_FRAMEWORKS,
+  SUPPORTED_MICROFRONTEND_STRATEGIES,
   VUE_FAMILY_FRAMEWORKS,
 } from "../constants.js";
 import type {
@@ -51,6 +52,19 @@ export function normalizeProjectPlan(
   }
 
   if (plan.architecture === "microfrontend" && !plan.workspace.microfrontendStrategy) {
+    plan.workspace.microfrontendStrategy = "vite-federation";
+  }
+
+  if (
+    plan.architecture === "microfrontend" &&
+    plan.workspace.microfrontendStrategy &&
+    !SUPPORTED_MICROFRONTEND_STRATEGIES.includes(plan.workspace.microfrontendStrategy)
+  ) {
+    warnings.push(
+      `Microfrontend scaffolds currently generate ${SUPPORTED_MICROFRONTEND_STRATEGIES
+        .map((strategy) => strategy.replace(/-/g, " "))
+        .join(", ")} projects; switching strategy to vite-federation.`,
+    );
     plan.workspace.microfrontendStrategy = "vite-federation";
   }
 
