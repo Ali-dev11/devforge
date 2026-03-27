@@ -39,6 +39,25 @@ type PackageJsonShape = {
   engines?: Record<string, string>;
 };
 
+const __unsafeCharMap: Record<string, string> = {
+  "<": "\\u003C",
+  ">": "\\u003E",
+  "/": "\\u002F",
+  "\\": "\\\\",
+  "\b": "\\b",
+  "\f": "\\f",
+  "\n": "\\n",
+  "\r": "\\r",
+  "\t": "\\t",
+  "\0": "\\0",
+  "\u2028": "\\u2028",
+  "\u2029": "\\u2029",
+};
+
+function escapeUnsafeChars(str: string): string {
+  return str.replace(/[<>\/\\\b\f\n\r\t\0\u2028\u2029]/g, (ch) => __unsafeCharMap[ch] ?? ch);
+}
+
 type ProjectDetailEntry = {
   label: string;
   value: string;
@@ -2199,7 +2218,7 @@ function remixSource(plan: ProjectPlan, context?: FrontendSurfaceContext): Gener
         "import { Links, Meta, Outlet, Scripts, ScrollRestoration } from \"@remix-run/react\";",
         `import stylesheet from ${JSON.stringify(stylesheetPath)};`,
         "",
-        `export const meta: MetaFunction = () => [{ title: ${JSON.stringify(toTitleCase(plan.projectName))} }];`,
+        `export const meta: MetaFunction = () => [{ title: ${escapeUnsafeChars(JSON.stringify(toTitleCase(plan.projectName)))} }];`,
         "",
         "export const links: LinksFunction = () => [",
         "  { rel: \"stylesheet\", href: stylesheet },",
