@@ -2,6 +2,10 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import type { EnvironmentInfo, InstallResult, ProjectPlan } from "../types.js";
+import {
+  isNodeVersionSupportedForPlan,
+  minimumSupportedNodeVersionHint,
+} from "../utils/node-compat.js";
 
 type InstallerHooks = {
   onStep?: (message: string) => void;
@@ -142,32 +146,42 @@ export function runInstallers(
   };
 
   if (!skipInstall) {
-    const invocation = installInvocation(plan.packageManager, environment, plan.targetDir);
-    dependencyInstall.command = invocation.label;
-    dependencyInstall.available = invocation.available;
-
-    if (!invocation.available) {
+    if (!isNodeVersionSupportedForPlan(plan, environment.nodeVersion)) {
+      dependencyInstall.attempted = false;
+      dependencyInstall.skipped = true;
       dependencyInstall.failureReason =
-        `${plan.packageManager} is not installed and Corepack is unavailable; generated project without installing dependencies.`;
+        `Current Node.js ${environment.nodeVersion} does not satisfy this scaffold (requires ${minimumSupportedNodeVersionHint(
+          plan,
+        )}). DevForge skipped dependency installation to avoid partial native installs.`;
       skipped.push(dependencyInstall.failureReason);
     } else {
-      hooks?.onStep?.(`Installing dependencies with ${invocation.label}`);
-      removeIncompatibleLockfiles(plan.targetDir, plan.packageManager);
-      const installResult = runCommand(
-        invocation.command,
-        invocation.args,
-        plan.targetDir,
-        invocation.env,
-      );
+      const invocation = installInvocation(plan.packageManager, environment, plan.targetDir);
+      dependencyInstall.command = invocation.label;
+      dependencyInstall.available = invocation.available;
 
-      if (installResult.ok) {
-        executed.push(invocation.label);
-        dependencyInstall.succeeded = true;
-      } else {
-        dependencyInstall.failureReason = installResult.output
-          ? `${invocation.label} failed: ${installResult.output.split(/\r?\n/)[0]}`
-          : `${invocation.label} failed; dependencies were not installed.`;
+      if (!invocation.available) {
+        dependencyInstall.failureReason =
+          `${plan.packageManager} is not installed and Corepack is unavailable; generated project without installing dependencies.`;
         skipped.push(dependencyInstall.failureReason);
+      } else {
+        hooks?.onStep?.(`Installing dependencies with ${invocation.label}`);
+        removeIncompatibleLockfiles(plan.targetDir, plan.packageManager);
+        const installResult = runCommand(
+          invocation.command,
+          invocation.args,
+          plan.targetDir,
+          invocation.env,
+        );
+
+        if (installResult.ok) {
+          executed.push(invocation.label);
+          dependencyInstall.succeeded = true;
+        } else {
+          dependencyInstall.failureReason = installResult.output
+            ? `${invocation.label} failed: ${installResult.output.split(/\r?\n/)[0]}`
+            : `${invocation.label} failed; dependencies were not installed.`;
+          skipped.push(dependencyInstall.failureReason);
+        }
       }
     }
   } else {

@@ -55,6 +55,7 @@ import {
   getSupportedRenderingModes,
   getSupportedStateChoices,
   getSupportedStateChoicesForDataFetching,
+  getSupportedTestEnvironments,
   getSupportedTestRunners,
   getSupportedUiLibraries,
 } from "../guidance.js";
@@ -1006,14 +1007,6 @@ export async function collectProjectPlan(
     getSupportedTestRunners(plan),
   );
 
-  const availableTestEnvironmentChoices = TEST_ENVIRONMENT_CHOICES.filter((choice) => {
-    if (!plan.frontend && !needsChromeExtension(plan.intent)) {
-      return choice.value === "node";
-    }
-
-    return true;
-  });
-
   const testingSetupAnswers = await prompts(
     [
       {
@@ -1051,21 +1044,6 @@ export async function collectProjectPlan(
           ),
         },
         {
-          type: (_: unknown, values: Record<string, unknown>) =>
-            values.runner !== "playwright" && values.runner !== "cypress"
-              ? "select"
-              : null,
-          name: "environment",
-          message: "Test environment",
-          choices: availableTestEnvironmentChoices,
-          initial: getInitialChoiceIndex(
-            availableTestEnvironmentChoices,
-            plan.testing.environment === "none" || plan.testing.environment === "browser-e2e"
-              ? undefined
-              : plan.testing.environment,
-          ),
-        },
-        {
           type: "toggle",
           name: "includeExampleTests",
           message: "Generate example test cases?",
@@ -1077,13 +1055,43 @@ export async function collectProjectPlan(
       { onCancel: cancelHandler },
     );
 
+    const selectedRunner = testingAnswers.runner ?? plan.testing.runner;
+    const availableTestEnvironmentChoices = filterChoices(
+      TEST_ENVIRONMENT_CHOICES,
+      getSupportedTestEnvironments(plan, selectedRunner),
+    );
+    const testingEnvironmentAnswers =
+      selectedRunner !== "playwright" &&
+      selectedRunner !== "cypress" &&
+      availableTestEnvironmentChoices.length > 1
+        ? await prompts(
+            [
+              {
+                type: "select",
+                name: "environment",
+                message: "Test environment",
+                choices: availableTestEnvironmentChoices,
+                initial: getInitialChoiceIndex(
+                  availableTestEnvironmentChoices,
+                  plan.testing.environment === "none" || plan.testing.environment === "browser-e2e"
+                    ? undefined
+                    : plan.testing.environment,
+                ),
+              },
+            ],
+            { onCancel: cancelHandler },
+          )
+        : ({} as { environment?: TestingConfig["environment"] });
+
     plan.testing = {
       enabled: true,
-      runner: testingAnswers.runner ?? plan.testing.runner,
+      runner: selectedRunner,
       environment:
-        testingAnswers.runner === "playwright" || testingAnswers.runner === "cypress"
+        selectedRunner === "playwright" || selectedRunner === "cypress"
           ? "browser-e2e"
-          : testingAnswers.environment ?? plan.testing.environment,
+          : testingEnvironmentAnswers.environment ??
+            availableTestEnvironmentChoices[0]?.value ??
+            plan.testing.environment,
       includeExampleTests: Boolean(
         testingAnswers.includeExampleTests ?? plan.testing.includeExampleTests,
       ),

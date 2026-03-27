@@ -3311,7 +3311,7 @@ function testingFiles(plan: ProjectPlan): GeneratedFile[] {
   }
 
   const configExtension = usesTypeScript(plan) ? "ts" : "js";
-  const jestConfigExtension = usesTypeScript(plan) ? "ts" : "cjs";
+  const jestConfigExtension = "cjs";
   const testExtension = usesTypeScript(plan) ? "ts" : "js";
 
   if (plan.testing.runner === "vitest") {
@@ -3354,18 +3354,21 @@ function testingFiles(plan: ProjectPlan): GeneratedFile[] {
       makeFile(
         `jest.config.${jestConfigExtension}`,
         [
-          ...(usesTypeScript(plan)
-            ? [
-                "import type { Config } from \"jest\";",
-                "",
-                "const config: Config = {",
-              ]
-            : ["const config = {"]),
+          "const config = {",
           `  testEnvironment: "${plan.testing.environment === "node" ? "node" : "jsdom"}",`,
           `  testMatch: ["**/*.test.${testExtension}", "**/*.test.${usesTypeScript(plan) ? "tsx" : "jsx"}"],`,
+          ...(usesTypeScript(plan)
+            ? [
+                '  extensionsToTreatAsEsm: [".ts", ".tsx"],',
+                "  transform: {",
+                '    "^.+\\\\.(ts|tsx)$": ["ts-jest", { useESM: true, tsconfig: "tsconfig.json" }],',
+                "  },",
+                '  moduleFileExtensions: ["ts", "tsx", "js", "jsx", "json"],',
+              ]
+            : []),
           "};",
           "",
-          usesTypeScript(plan) ? "export default config;" : "module.exports = config;",
+          "module.exports = config;",
           "",
         ].join("\n"),
       ),

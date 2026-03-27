@@ -11,12 +11,17 @@ import type {
   PostCreateGuidance,
   ProjectIntent,
   ProjectPlan,
+  TestEnvironment,
   TestRunner,
   UiLibrary,
   StateChoice,
   DataFetchingChoice,
 } from "./types.js";
 import { REACT_FAMILY_FRAMEWORKS, VUE_FAMILY_FRAMEWORKS } from "./constants.js";
+import {
+  isNodeVersionSupportedForPlan,
+  minimumSupportedNodeVersionHint,
+} from "./utils/node-compat.js";
 
 const ALL_PACKAGE_MANAGERS: PackageManager[] = ["npm", "pnpm", "yarn", "bun"];
 const ALL_UI_LIBRARIES: UiLibrary[] = [
@@ -76,19 +81,31 @@ function platformScopedPlaywrightInstallCommand(platform: NodeJS.Platform): stri
     : "npx playwright install";
 }
 
+function preferredNodeVersionForPlan(plan: ProjectPlan): string | undefined {
+  if (plan.nodeStrategy === "custom" && plan.customNodeVersion) {
+    return plan.customNodeVersion;
+  }
+
+  return hasFrontendLikeSurface(plan) ? "22.12.0" : "20.0.0";
+}
+
 function platformScopedNodeSetupCommand(
-  platform: NodeJS.Platform,
-  customNodeVersion: string | undefined,
+  environment: EnvironmentInfo,
+  targetNodeVersion: string | undefined,
 ): string | undefined {
-  if (!customNodeVersion) {
+  if (!targetNodeVersion) {
     return undefined;
   }
 
-  if (platform === "win32") {
-    return `nvm install ${customNodeVersion} && nvm use ${customNodeVersion}`;
+  if (hasSystemTool(environment, "fnm")) {
+    return `fnm install ${targetNodeVersion} && fnm use ${targetNodeVersion}`;
   }
 
-  return `nvm install ${customNodeVersion} && nvm use ${customNodeVersion}`;
+  if (environment.platform === "win32") {
+    return `nvm install ${targetNodeVersion} && nvm use ${targetNodeVersion}`;
+  }
+
+  return `nvm install ${targetNodeVersion} && nvm use ${targetNodeVersion}`;
 }
 
 function platformScopedGitInstallCommand(platform: NodeJS.Platform): string {
@@ -400,6 +417,25 @@ export function getSupportedTestRunners(plan: ProjectPlan): TestRunner[] {
   return ["vitest", "jest", "playwright", "cypress"];
 }
 
+export function getSupportedTestEnvironments(
+  plan: ProjectPlan,
+  runner: TestRunner,
+): TestEnvironment[] {
+  if (runner === "playwright" || runner === "cypress") {
+    return ["browser-e2e"];
+  }
+
+  if (!plan.frontend && plan.intent !== "chrome-extension") {
+    return ["node"];
+  }
+
+  if (runner === "jest") {
+    return ["node", "jsdom"];
+  }
+
+  return ["node", "jsdom", "happy-dom"];
+}
+
 export function chooseSupportedPackageManager(
   plan: ProjectPlan,
   environment: EnvironmentInfo,
@@ -591,17 +627,40 @@ export function buildRuntimeGuidance(
   const templateGuidance = buildTemplateGuidance(plan);
   const requiredBeforeRun = [...templateGuidance.requiredBeforeRun];
   const recommended = [...templateGuidance.recommended];
+  const currentNodeSupported = isNodeVersionSupportedForPlan(plan, environment.nodeVersion);
 
   if (
     plan.nodeStrategy === "custom" &&
     plan.customNodeVersion &&
+    currentNodeSupported &&
     !environment.nodeVersion.toLowerCase().includes(plan.customNodeVersion.toLowerCase())
   ) {
     requiredBeforeRun.unshift({
       title: "Switch Node.js versions",
       detail: `Your shell is currently using ${environment.nodeVersion}, but this project was configured for Node.js ${plan.customNodeVersion}.`,
-      command: platformScopedNodeSetupCommand(environment.platform, plan.customNodeVersion),
+      command: platformScopedNodeSetupCommand(environment, plan.customNodeVersion),
     });
+  }
+
+  if (!currentNodeSupported) {
+    requiredBeforeRun.unshift({
+      title: "Use a compatible Node.js version",
+      detail: `Your shell is currently using ${environment.nodeVersion}, but this scaffold requires Node.js ${minimumSupportedNodeVersionHint(plan)} before install, build, or dev commands will work reliably.`,
+      command: platformScopedNodeSetupCommand(environment, preferredNodeVersionForPlan(plan)),
+    });
+  }
+
+  if (
+    requiredBeforeRun.some(
+      (item) => item.title === "Use a compatible Node.js version" || item.title === "Switch Node.js versions",
+    )
+  ) {
+    const genericNodeIndex = requiredBeforeRun.findIndex(
+      (item) => item.title === "Use the selected Node.js version",
+    );
+    if (genericNodeIndex >= 0) {
+      requiredBeforeRun.splice(genericNodeIndex, 1);
+    }
   }
 
   if (!environment.packageManagers[plan.packageManager].installed) {
@@ -621,10 +680,7 @@ export function buildRuntimeGuidance(
         item.title === "Switch Node.js versions") &&
       plan.customNodeVersion
     ) {
-      item.command = platformScopedNodeSetupCommand(
-        environment.platform,
-        plan.customNodeVersion,
-      );
+      item.command = platformScopedNodeSetupCommand(environment, plan.customNodeVersion);
     }
 
     if (item.title === "Install Playwright browsers") {

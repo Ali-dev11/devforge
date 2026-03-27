@@ -32,6 +32,7 @@ function createEnvironment(platform: NodeJS.Platform): EnvironmentInfo {
       git: { installed: true, version: "2.45.1", path: "/usr/bin/git" },
       docker: { installed: true, version: "27.0.0", path: "/usr/local/bin/docker" },
       corepack: { installed: true, version: "0.29.3", path: "/usr/local/bin/corepack" },
+      fnm: { installed: true, version: "1.37.1", path: "/usr/local/bin/fnm" },
     },
   };
 }
@@ -105,7 +106,7 @@ test("runtime guidance prints Linux-specific Playwright and custom Node setup co
 
   assert.match(
     guidance.requiredBeforeRun.map((item) => `${item.title} ${item.command ?? ""}`).join("\n"),
-    /Switch Node\.js versions[\s\S]*nvm install 23\.11\.0 && nvm use 23\.11\.0/i,
+    /Use a compatible Node\.js version[\s\S]*fnm install 23\.11\.0 && fnm use 23\.11\.0/i,
   );
   assert.match(
     guidance.requiredBeforeRun.map((item) => `${item.title} ${item.command ?? ""}`).join("\n"),
@@ -153,6 +154,7 @@ test("runtime guidance falls back to npm when pnpm is selected but Corepack is u
     git: { installed: true, version: "2.45.1", path: "/usr/bin/git" },
     docker: { installed: true, version: "27.0.0", path: "/usr/local/bin/docker" },
     corepack: { installed: false },
+    fnm: { installed: true, version: "1.37.1", path: "/usr/local/bin/fnm" },
   };
 
   const plan = buildDefaultPlan(environment, cliOptions);
@@ -174,6 +176,38 @@ test("runtime guidance falls back to npm when pnpm is selected but Corepack is u
     guidance.requiredBeforeRun.map((item) => `${item.title} ${item.command ?? ""}`).join("\n"),
     /Install or enable pnpm[\s\S]*npm install -g pnpm/i,
   );
+});
+
+test("runtime guidance blocks next commands when the current Node.js version cannot run the scaffold", () => {
+  const environment = createEnvironment("darwin");
+  environment.nodeVersion = "v22.0.0";
+  const plan = buildDefaultPlan(environment, cliOptions);
+  plan.intent = "chrome-extension";
+  plan.targetDir = "/tmp/devforge-guidance-test/extension-app";
+
+  const guidance = buildRuntimeGuidance(
+    plan,
+    environment,
+    createInstallResult({
+      attempted: false,
+      succeeded: false,
+      skipped: true,
+      command: "corepack pnpm install",
+      failureReason:
+        "Current Node.js v22.0.0 does not satisfy this scaffold (requires 20.19.0 or 22.12.0+). DevForge skipped dependency installation to avoid partial native installs.",
+    }),
+    "/tmp",
+  );
+
+  assert.match(
+    guidance.requiredBeforeRun.map((item) => `${item.title} ${item.command ?? ""}`).join("\n"),
+    /Use a compatible Node\.js version[\s\S]*fnm install 22\.12\.0 && fnm use 22\.12\.0/i,
+  );
+  assert.match(
+    guidance.requiredBeforeRun.map((item) => `${item.title} ${item.detail}`).join("\n"),
+    /Install project dependencies[\s\S]*skipped dependency installation/i,
+  );
+  assert.deepEqual(guidance.nextCommands, []);
 });
 
 test("template guidance carries Bun and Docker prerequisites into generated docs", () => {

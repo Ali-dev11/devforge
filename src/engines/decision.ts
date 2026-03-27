@@ -21,6 +21,7 @@ import {
   getSupportedPackageManagers,
   getSupportedRenderingModes,
   getSupportedStateChoices,
+  getSupportedTestEnvironments,
   getSupportedTestRunners,
   getSupportedUiLibraries,
 } from "../guidance.js";
@@ -340,14 +341,15 @@ export function normalizeProjectPlan(
     }
   }
 
-  if (
-    plan.testing.enabled &&
-    !plan.frontend &&
-    plan.intent !== "chrome-extension" &&
-    (plan.testing.environment === "jsdom" || plan.testing.environment === "happy-dom")
-  ) {
-    warnings.push("Node-oriented projects should use a Node test environment; switching test environment to node.");
-    plan.testing.environment = "node";
+  const supportedTestEnvironments = getSupportedTestEnvironments(plan, plan.testing.runner);
+  if (plan.testing.enabled && !supportedTestEnvironments.includes(plan.testing.environment)) {
+    const fallbackEnvironment = supportedTestEnvironments.includes("jsdom")
+      ? "jsdom"
+      : (supportedTestEnvironments[0] ?? "node");
+    warnings.push(
+      `${plan.testing.environment} is not scaffolded for ${plan.testing.runner}; switching test environment to ${fallbackEnvironment}.`,
+    );
+    plan.testing.environment = fallbackEnvironment;
   }
 
   const availableRuleCategories = getAvailableRuleCategories(plan);

@@ -17,6 +17,7 @@ import {
   getSupportedFrontendFrameworks,
   getSupportedPackageManagers,
   getSupportedRenderingModes,
+  getSupportedTestEnvironments,
   getSupportedTestRunners,
 } from "../src/guidance.js";
 import type { CliOptions, EnvironmentInfo } from "../src/types.js";
@@ -367,6 +368,25 @@ test("browser e2e runners only appear on supported stacks", () => {
   applyIntentDefaults(extensionPlan);
 
   assert.deepEqual(getSupportedTestRunners(extensionPlan), ["vitest", "jest"]);
+  assert.deepEqual(getSupportedTestEnvironments(extensionPlan, "jest"), ["node", "jsdom"]);
+  assert.deepEqual(getSupportedTestEnvironments(extensionPlan, "vitest"), ["node", "jsdom", "happy-dom"]);
+});
+
+test("normalization drops unsupported jest test environments to a compatible fallback", () => {
+  const plan = buildDefaultPlan(environment, cliOptions);
+  plan.intent = "chrome-extension";
+  applyIntentDefaults(plan);
+  plan.testing = {
+    enabled: true,
+    runner: "jest",
+    environment: "happy-dom",
+    includeExampleTests: true,
+  };
+
+  const result = normalizeProjectPlan(plan, environment);
+
+  assert.equal(result.plan.testing.environment, "jsdom");
+  assert.match(result.warnings.join(" "), /switching test environment to jsdom/i);
 });
 
 test("backend language choices stay stack-aware", () => {

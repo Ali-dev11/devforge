@@ -131,8 +131,8 @@ test("workspace scaffolds local tsconfig files, app tests, and root tooling depe
 
   assert.ok(paths.has("apps/web/tsconfig.json"));
   assert.ok(paths.has("apps/api/tsconfig.json"));
-  assert.ok(paths.has("apps/web/jest.config.ts"));
-  assert.ok(paths.has("apps/api/jest.config.ts"));
+  assert.ok(paths.has("apps/web/jest.config.cjs"));
+  assert.ok(paths.has("apps/api/jest.config.cjs"));
   assert.match(webTsconfig?.content ?? "", /"types": \[/);
   assert.match(apiTsconfig?.content ?? "", /"node"/);
   assert.equal(rootPackageJson.scripts.test, "turbo run test");
@@ -355,6 +355,27 @@ test("playwright docs and commands stay package-manager aware", () => {
   assert.match(readmeFile.content, /pnpm run check/);
   assert.match(gettingStartedFile.content, /npx playwright install/);
   assert.match(playwrightConfigFile.content, /command: "pnpm run dev"/);
+});
+
+test("jest scaffolds emit runnable cjs config for TypeScript projects", () => {
+  const plan = buildDefaultPlan(environment, cliOptions);
+  plan.intent = "chrome-extension";
+  applyIntentDefaults(plan);
+  plan.testing = {
+    enabled: true,
+    runner: "jest",
+    environment: "jsdom",
+    includeExampleTests: true,
+  };
+
+  const files = buildProjectFiles(plan, environment);
+  const jestConfigFile = files.find((file) => file.path === "jest.config.cjs");
+
+  assert.ok(jestConfigFile);
+  assert.equal(files.some((file) => file.path === "jest.config.ts"), false);
+  assert.match(jestConfigFile.content, /module\.exports = config/);
+  assert.match(jestConfigFile.content, /ts-jest/);
+  assert.match(jestConfigFile.content, /extensionsToTreatAsEsm/);
 });
 
 test("nestjs and javascript backend scaffolds include compatible build settings", () => {

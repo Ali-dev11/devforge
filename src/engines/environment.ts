@@ -66,6 +66,7 @@ export function detectEnvironment(): EnvironmentInfo {
       git: detectBinary("git", ["--version"]),
       docker: detectBinary("docker", ["--version"]),
       corepack: detectBinary("corepack", ["--version"]),
+      fnm: detectBinary("fnm", ["--version"]),
     },
   };
 }

@@ -137,7 +137,7 @@ export async function runInitCommand(options: CliOptions): Promise<void> {
   await clearResume();
   const guidance = buildRuntimeGuidance(plan, environment, installResult, process.cwd());
 
-  success("\nYour project is ready.");
+  success(`\n${installResult.dependencyInstall.succeeded ? "Your project is ready." : "Your project files are ready."}`);
   step(`Files written: ${generated.filesWritten.length}`);
 
   if (installResult.executed.length > 0) {

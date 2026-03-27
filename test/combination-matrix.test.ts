@@ -19,6 +19,7 @@ import {
   getSupportedPackageManagers,
   getSupportedRenderingModes,
   getSupportedStateChoices,
+  getSupportedTestEnvironments,
   getSupportedTestRunners,
   getSupportedUiLibraries,
 } from "../src/guidance.js";
@@ -34,8 +35,6 @@ import type {
   ProjectPlan,
   StrictnessLevel,
   TemplateTier,
-  TestEnvironment,
-  TestRunner,
   WorkspaceTool,
 } from "../src/types.js";
 
@@ -101,21 +100,6 @@ function ormChoicesForDatabase(database: DatabaseChoice): OrmChoice[] {
   }
 
   return database === "mongodb" ? ["none", "prisma"] : ["none", "prisma", "drizzle"];
-}
-
-function testEnvironmentsForRunner(
-  plan: ProjectPlan,
-  runner: TestRunner,
-): TestEnvironment[] {
-  if (runner === "playwright" || runner === "cypress") {
-    return ["browser-e2e"];
-  }
-
-  if (!plan.frontend && plan.intent !== "chrome-extension") {
-    return ["node"];
-  }
-
-  return ["node", "jsdom", "happy-dom"];
 }
 
 function assertGeneratedScaffold(plan: ProjectPlan, label: string): void {
@@ -419,7 +403,7 @@ test("supported testing, tooling, node, and template combinations remain buildab
   for (const basePlan of representativePlans) {
     for (const runner of getSupportedTestRunners(basePlan)) {
       const testPlan = structuredClone(basePlan);
-      for (const environmentName of testEnvironmentsForRunner(testPlan, runner)) {
+      for (const environmentName of getSupportedTestEnvironments(testPlan, runner)) {
         testPlan.testing = {
           enabled: true,
           runner,

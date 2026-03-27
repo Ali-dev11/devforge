@@ -113,6 +113,7 @@ export interface EnvironmentInfo {
     git?: BinaryStatus;
     docker?: BinaryStatus;
     corepack?: BinaryStatus;
+    fnm?: BinaryStatus;
   };
 }
 
