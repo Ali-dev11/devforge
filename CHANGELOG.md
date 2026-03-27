@@ -6,6 +6,14 @@ The format follows Keep a Changelog and the version numbers follow Semantic Vers
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-03-27
+
+### Fixed
+
+- Fixed generated Jest setups for TypeScript projects to use runnable CommonJS config files with `ts-jest` transforms, so scaffolds no longer require `ts-node` just to load `jest.config`.
+- Fixed scaffold creation on unsupported local Node versions by skipping dependency installation before partial native installs can happen and by printing explicit version-switch and reinstall guidance instead of misleading run commands.
+- Stopped offering `happy-dom` with Jest and normalize unsupported test environment selections to supported fallbacks.
+
 ## [0.4.2] - 2026-03-26
 
 ### Added
