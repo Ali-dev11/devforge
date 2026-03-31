@@ -15,6 +15,7 @@ title: Development
 ```bash
 npm install
 npm run check
+npx --yes @ali-dev11/devforge@latest doctor
 ```
 
 ## Repository Commands
@@ -28,6 +29,7 @@ npm run build
 npm run check
 npm run docs:changelog
 npm run smoke
+npm run smoke:packed
 npm run runtime:matrix -- --scenario backend-hono --scenario cli-tool
 ```
 
@@ -39,14 +41,18 @@ npm run runtime:matrix -- --scenario backend-hono --scenario cli-tool
 - `npm run test` runs focused regression tests for prompting, normalization, generator output, changelog rendering, and runtime-matrix coverage.
 - `npm run build` compiles the CLI to `dist/`, which mirrors what npm users receive.
 - `npm run check` is the primary contributor gate because it runs lint, types, tests, and build verification together.
+- `npx --yes @ali-dev11/devforge@latest doctor` checks the local machine for the tool and runtime prerequisites that commonly break first-run scaffolds.
 - `npm run docs:changelog` keeps the GitHub Pages changelog synchronized with `CHANGELOG.md`.
 - `npm run smoke` verifies a fast end-to-end scaffold run without interactive prompts.
+- `npm run smoke:packed` verifies the built npm tarball by installing the packed artifact into a temp directory and running the shipped CLI from there.
 - `npm run runtime:matrix -- --scenario ...` validates generated projects as products by installing, building, and checking runtime behavior for representative stacks.
 
 ## Working On Generated Scaffolds
 
 - Prefer `npm run smoke` for quick CLI sanity checks.
+- Run `npx --yes @ali-dev11/devforge@latest init --preflight-only` when you want stack-aware readiness checks without writing a new project yet.
 - Use `npm run runtime:matrix` when changing templates, prompts, package-manager behavior, or generated runtime surfaces.
+- Use `npm run smoke:packed` when changing the package entrypoints, published files, CLI dispatch, or install-time behavior.
 - If you touch microfrontend templates, validate the generated `dev` workflow, not just build output.
 - If you touch docs or release notes, rerun `npm run docs:changelog`.
 

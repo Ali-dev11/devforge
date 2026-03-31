@@ -9,6 +9,19 @@ Track what changed in DevForge CLI across releases, including scaffolding behavi
 - [GitHub Releases](https://github.com/Ali-dev11/devforge/releases)
 - [Repository Changelog](https://github.com/Ali-dev11/devforge/blob/main/CHANGELOG.md)
 
+## [0.4.4] - 2026-03-31
+
+### Added
+
+- Added `devforge doctor`, a machine-level readiness command that inspects Node.js, package managers, Corepack, Bun, Playwright browser installs, Git, Docker, and SSH setup before scaffold generation.
+- Added `devforge init --preflight-only` so users can run the same stack-aware readiness checks as the normal init flow without writing project files yet.
+- Added a packed-tarball smoke script and CI gate so DevForge now validates the shipped npm artifact in addition to the source checkout.
+
+### Changed
+
+- Centralized machine-remediation commands into a shared module so `doctor`, preflight output, and runtime guidance all recommend the same OS-specific fix commands.
+- Improved CLI help and repository docs to explain the new preflight workflow, `doctor`, and the difference between source smoke checks and packed-artifact smoke checks.
+
 ## [0.4.3] - 2026-03-27
 
 ### Fixed

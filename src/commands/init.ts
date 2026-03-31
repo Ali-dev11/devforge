@@ -5,6 +5,11 @@ import { generateProject } from "../engines/generator.js";
 import { runInstallers } from "../engines/installer.js";
 import { normalizeProjectPlan } from "../engines/decision.js";
 import { buildDefaultPlan, collectProjectPlan } from "../engines/prompts.js";
+import {
+  buildPlanPreflightReport,
+  hasVisiblePreflightOutput,
+  printPreflightReport,
+} from "../preflight.js";
 import type { AdvisoryItem, CliOptions, ResumeState } from "../types.js";
 import { RESUME_STATE_PATH } from "../constants.js";
 import {
@@ -113,6 +118,29 @@ export async function runInitCommand(options: CliOptions): Promise<void> {
   if (warnings.length > 0) {
     for (const warning of warnings) {
       warn(warning);
+    }
+  }
+
+  const preflightReport = buildPlanPreflightReport(plan, environment);
+
+  if (options.preflightOnly) {
+    printPreflightReport(preflightReport, { showHealthy: true });
+
+    if (preflightReport.hasBlockingIssues) {
+      warn("Preflight found blocking issues. Fix them, then rerun `devforge init --resume` to continue.");
+      process.exitCode = 1;
+      return;
+    }
+
+    success("\nPreflight completed. Rerun `devforge init --resume` to generate the project with the same saved plan.");
+    return;
+  }
+
+  if (hasVisiblePreflightOutput(preflightReport)) {
+    printPreflightReport(preflightReport);
+
+    if (preflightReport.hasBlockingIssues) {
+      warn("Preflight found blocking issues. DevForge will still write the scaffold, but dependency installation may be skipped until you fix the items above.");
     }
   }
 

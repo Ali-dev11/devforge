@@ -67,6 +67,7 @@ export function detectEnvironment(): EnvironmentInfo {
       docker: detectBinary("docker", ["--version"]),
       corepack: detectBinary("corepack", ["--version"]),
       fnm: detectBinary("fnm", ["--version"]),
+      ssh: detectBinary("ssh", ["-V"]),
     },
   };
 }

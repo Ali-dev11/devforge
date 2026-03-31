@@ -1,4 +1,5 @@
 import type { CliOptions } from "./types.js";
+import { runDoctorCommand } from "./commands/doctor.js";
 import { runInitCommand } from "./commands/init.js";
 import { DEVFORGE_VERSION } from "./version.js";
 
@@ -12,11 +13,18 @@ function readFlagValue(flag: string, args: string[]): string {
   return value;
 }
 
-function parseArgs(argv: string[]): CliOptions {
+function assertInitOnlyFlag(currentCommand: CliOptions["command"], flag: string): void {
+  if (currentCommand !== "init") {
+    throw new Error(`${flag} can only be used with \`devforge init\`.`);
+  }
+}
+
+export function parseArgs(argv: string[]): CliOptions {
   const options: CliOptions = {
     command: "init",
     resume: false,
     skipInstall: false,
+    preflightOnly: false,
     yes: false,
   };
 
@@ -33,6 +41,10 @@ function parseArgs(argv: string[]): CliOptions {
     return options;
   }
 
+  if (firstArg === "doctor") {
+    options.command = "doctor";
+    args.shift();
+  } else
   if (firstArg === "init") {
     args.shift();
   } else if (firstArg && !firstArg.startsWith("-")) {
@@ -44,6 +56,7 @@ function parseArgs(argv: string[]): CliOptions {
 
     switch (current) {
       case "--resume":
+        assertInitOnlyFlag(options.command, "--resume");
         options.resume = true;
         break;
       case "--help":
@@ -55,16 +68,24 @@ function parseArgs(argv: string[]): CliOptions {
         options.command = "version";
         return options;
       case "--skip-install":
+        assertInitOnlyFlag(options.command, "--skip-install");
         options.skipInstall = true;
+        break;
+      case "--preflight-only":
+        assertInitOnlyFlag(options.command, "--preflight-only");
+        options.preflightOnly = true;
         break;
       case "--yes":
       case "-y":
+        assertInitOnlyFlag(options.command, "--yes");
         options.yes = true;
         break;
       case "--output":
+        assertInitOnlyFlag(options.command, "--output");
         options.outputDir = readFlagValue("--output", args);
         break;
       case "--name":
+        assertInitOnlyFlag(options.command, "--name");
         options.projectName = readFlagValue("--name", args);
         break;
       default:
@@ -86,15 +107,18 @@ Usage:
   devforge
   devforge init
   devforge init --resume
+  devforge doctor
 
 Commands:
   init            Start a new scaffold session
+  doctor          Inspect local machine readiness for DevForge scaffolds
   help            Show command help
   version         Print the current CLI version
 
 Flags:
   --resume         Resume the last saved init session
   --skip-install   Generate files without installing dependencies
+  --preflight-only Stop after printing stack-aware readiness checks
   --yes, -y        Use defaults without prompts
   --output <dir>   Write the generated project to a custom directory
   --name <name>    Override the generated project name
@@ -103,7 +127,9 @@ Flags:
 
 Examples:
   npx @ali-dev11/devforge@latest
+  npx @ali-dev11/devforge@latest doctor
   npx @ali-dev11/devforge@latest init --yes --skip-install --output ./my-app
+  devforge init --preflight-only
   devforge init --resume
 `);
 }
@@ -122,6 +148,11 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
 
   if (options.command === "version") {
     printVersion();
+    return;
+  }
+
+  if (options.command === "doctor") {
+    await runDoctorCommand();
     return;
   }
 

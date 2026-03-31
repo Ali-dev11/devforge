@@ -1,6 +1,6 @@
 {
   "name": "@ali-dev11/devforge",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "description": "Production-focused AI-native project scaffolding CLI for JavaScript and TypeScript teams.",
   "license": "MIT",
   "author": "Ali-dev11",
@@ -64,7 +64,8 @@
     "pretypecheck": "npm run prepare:metadata",
     "version": "npm run prepare:metadata && git add src/generated/package-metadata.ts",
     "prepack": "npm run check",
-    "smoke": "npm run build && node --eval \"require('node:fs').rmSync('/tmp/devforge-smoke', { recursive: true, force: true })\" && node dist/bin/devforge.js init --yes --skip-install --output /tmp/devforge-smoke"
+    "smoke": "npm run build && node --eval \"require('node:fs').rmSync('/tmp/devforge-smoke', { recursive: true, force: true })\" && node dist/bin/devforge.js init --yes --skip-install --output /tmp/devforge-smoke",
+    "smoke:packed": "node scripts/smoke-packed.mjs"
   },
   "engines": {
     "node": ">=20.0.0"
