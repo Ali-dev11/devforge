@@ -186,6 +186,7 @@ function shouldManagePathForFeature(path: string, feature: AddFeature): boolean 
   switch (feature) {
     case "testing":
       return (
+        path === "README.md" ||
         path === "docs/architecture.md" ||
         path === "docs/getting-started.md" ||
         /(^|\/)package\.json$/.test(path) ||
@@ -201,6 +202,7 @@ function shouldManagePathForFeature(path: string, feature: AddFeature): boolean 
       );
     case "docker":
       return (
+        path === "README.md" ||
         path === "Dockerfile" ||
         path === ".dockerignore" ||
         path === "docs/architecture.md" ||
@@ -208,12 +210,14 @@ function shouldManagePathForFeature(path: string, feature: AddFeature): boolean 
       );
     case "github-actions":
       return (
+        path === "README.md" ||
         path === ".github/workflows/ci.yml" ||
         path === "docs/architecture.md" ||
         path === "docs/getting-started.md"
       );
     case "ai-rules":
       return (
+        path === "README.md" ||
         path === "AGENTS.md" ||
         path === "docs/ai-rules-sources.md" ||
         path === "docs/architecture.md" ||
@@ -266,11 +270,21 @@ async function mergeManagedPackageJson(
     return true;
   }
 
-  const currentJson = JSON.parse(currentContent) as PackageJsonShape & Record<string, unknown>;
-  const previousGenerated = previousGeneratedContent
-    ? (JSON.parse(previousGeneratedContent) as PackageJsonShape)
-    : undefined;
-  const nextGenerated = JSON.parse(nextGeneratedContent) as PackageJsonShape;
+  let currentJson: PackageJsonShape & Record<string, unknown>;
+  let previousGenerated: PackageJsonShape | undefined;
+  let nextGenerated: PackageJsonShape;
+
+  try {
+    currentJson = JSON.parse(currentContent) as PackageJsonShape & Record<string, unknown>;
+    previousGenerated = previousGeneratedContent
+      ? (JSON.parse(previousGeneratedContent) as PackageJsonShape)
+      : undefined;
+    nextGenerated = JSON.parse(nextGeneratedContent) as PackageJsonShape;
+  } catch {
+    throw new Error(
+      `Could not update ${path} because it is not valid JSON. Fix the file or add the feature manually.`,
+    );
+  }
 
   const sections: Array<keyof Pick<
     PackageJsonShape,
@@ -415,8 +429,12 @@ export async function applyAddFeature(
   }
 
   const projectPlanPath = join(cwd, PROJECT_PLAN_PATH);
-  await writeJson(projectPlanPath, plan);
-  filesWritten.push(projectPlanPath);
+  const nextProjectPlanContent = `${JSON.stringify(plan, null, 2)}\n`;
+  const currentProjectPlanContent = await readTextFileIfExists(projectPlanPath);
+  if (currentProjectPlanContent !== nextProjectPlanContent) {
+    await writeJson(projectPlanPath, plan);
+    filesWritten.push(projectPlanPath);
+  }
 
   const installPlan: ProjectPlan = {
     ...plan,

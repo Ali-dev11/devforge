@@ -70,6 +70,7 @@ try {
       resolve(installDir, "node_modules/@ali-dev11/devforge/dist/bin/devforge.js"),
       "init",
       "--yes",
+      "--save-config",
       "--skip-install",
       "--output",
       outputDir,
@@ -86,6 +87,10 @@ try {
     ],
     outputDir,
   );
+
+  if (!existsSync(resolve(outputDir, "devforge.config.json"))) {
+    throw new Error("Packed smoke run did not create devforge.config.json during `devforge init --save-config`.");
+  }
 
   if (!existsSync(resolve(outputDir, "Dockerfile"))) {
     throw new Error("Packed smoke run did not create Dockerfile after `devforge add docker`.");

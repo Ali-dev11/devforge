@@ -24,6 +24,8 @@ The format follows Keep a Changelog and the version numbers follow Semantic Vers
 ### Fixed
 
 - Made post-scaffold feature application metadata-driven by reading `.devforge/project-plan.json`, which avoids stack guessing and keeps repeated `devforge add` runs idempotent.
+- Fixed `devforge init --save-config` with the default in-project config path so the saved config no longer makes the target directory look non-empty before generation.
+- Tightened `devforge add` guidance and managed-file updates so repeated runs avoid unnecessary churn and generated README content stays aligned with newly added managed features.
 
 ## [0.4.4] - 2026-03-31
 

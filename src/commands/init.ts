@@ -1,4 +1,4 @@
-import { dirname, join } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
 import {
   defaultConfigOutputPath,
   readProjectPlanConfig,
@@ -102,6 +102,13 @@ function printStackNotes(notes: string[]): void {
   }
 }
 
+function pathIsInsideDir(path: string, dir: string): boolean {
+  const resolvedPath = resolve(path);
+  const resolvedDir = resolve(dir);
+
+  return resolvedPath === resolvedDir || resolvedPath.startsWith(`${resolvedDir}${sep}`);
+}
+
 export async function runInitCommand(options: CliOptions): Promise<void> {
   const environment = detectEnvironment();
   const resumeState = options.resume ? await loadResumePlan() : undefined;
@@ -142,8 +149,11 @@ export async function runInitCommand(options: CliOptions): Promise<void> {
       ? resolveConfigPath(options.saveConfigPath)
       : defaultConfigOutputPath(plan.targetDir)
     : undefined;
+  const deferSaveConfigUntilAfterGenerate = saveConfigPath
+    ? !options.preflightOnly && pathIsInsideDir(saveConfigPath, plan.targetDir)
+    : false;
 
-  if (saveConfigPath) {
+  if (saveConfigPath && !deferSaveConfigUntilAfterGenerate) {
     await writeProjectPlanConfig(saveConfigPath, plan);
     step(`Saved normalized config to ${saveConfigPath}`);
   }
@@ -184,6 +194,11 @@ export async function runInitCommand(options: CliOptions): Promise<void> {
       step(message);
     },
   });
+
+  if (saveConfigPath && deferSaveConfigUntilAfterGenerate) {
+    await writeProjectPlanConfig(saveConfigPath, plan);
+    step(`Saved normalized config to ${saveConfigPath}`);
+  }
 
   if (plan.git.setupSsh) {
     warn("SSH setup was requested; DevForge generated guidance in the README instead of editing system SSH config.");

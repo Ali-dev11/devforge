@@ -58,15 +58,18 @@ test("add docker enables Docker support and is idempotent on rerun", async () =>
   });
 
   const dockerfile = await readFile(join(targetDir, "Dockerfile"), "utf8");
+  const readme = await readFile(join(targetDir, "README.md"), "utf8");
   const storedPlan = JSON.parse(
     await readFile(join(targetDir, ".devforge", "project-plan.json"), "utf8"),
   ) as { tooling: { docker: boolean } };
 
   assert.equal(firstRun.featureAlreadyConfigured, false);
   assert.equal(secondRun.featureAlreadyConfigured, true);
+  assert.equal(secondRun.filesWritten.length, 0);
   assert.equal(firstRun.installResult.dependencyInstall.succeeded, false);
   assert.match(firstRun.installResult.skipped.join(" "), /do not appear to be installed/i);
   assert.match(dockerfile, /FROM node:22-alpine/);
+  assert.match(readme, /Install Docker before using container workflows/i);
   assert.equal(storedPlan.tooling.docker, true);
 });
 
