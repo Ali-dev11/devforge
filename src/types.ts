@@ -87,12 +87,17 @@ export type LicenseChoice =
   | "ISC"
   | "Unlicense"
   | "Proprietary";
+export type AddFeature = "testing" | "docker" | "github-actions" | "ai-rules";
 
 export interface CliOptions {
-  command: "init" | "help" | "version" | "doctor";
+  command: "init" | "help" | "version" | "doctor" | "add";
   resume: boolean;
   skipInstall: boolean;
   preflightOnly?: boolean;
+  configPath?: string;
+  saveConfig?: boolean;
+  saveConfigPath?: string;
+  addFeature?: AddFeature;
   yes: boolean;
   outputDir?: string;
   projectName?: string;
@@ -218,6 +223,10 @@ export interface ProjectPlan {
   git: GitConfig;
   metadata: MetadataConfig;
 }
+
+export type ProjectPlanConfig = Omit<ProjectPlan, "targetDir"> & {
+  targetDir?: string;
+};
 
 export interface ResumeState {
   updatedAt: string;

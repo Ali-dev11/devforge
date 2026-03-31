@@ -17,9 +17,52 @@ test("cli parses init preflight mode", () => {
   assert.equal(options.yes, true);
 });
 
+test("cli parses add command with a feature and skip-install", () => {
+  const options = parseArgs(["add", "docker", "--skip-install"]);
+
+  assert.equal(options.command, "add");
+  assert.equal(options.addFeature, "docker");
+  assert.equal(options.skipInstall, true);
+});
+
+test("cli treats add --help as help output", () => {
+  const options = parseArgs(["add", "--help"]);
+
+  assert.equal(options.command, "help");
+});
+
+test("cli parses config-driven init and optional save-config path", () => {
+  const options = parseArgs([
+    "init",
+    "--config",
+    "./devforge.config.json",
+    "--save-config",
+    "./saved/devforge.config.json",
+  ]);
+
+  assert.equal(options.command, "init");
+  assert.equal(options.configPath, "./devforge.config.json");
+  assert.equal(options.saveConfig, true);
+  assert.equal(options.saveConfigPath, "./saved/devforge.config.json");
+});
+
 test("cli rejects init-only flags on doctor", () => {
   assert.throws(
     () => parseArgs(["doctor", "--skip-install"]),
-    /--skip-install can only be used with `devforge init`/i,
+    /--skip-install can only be used with `devforge init` or `devforge add`/i,
+  );
+});
+
+test("cli rejects config and resume together", () => {
+  assert.throws(
+    () => parseArgs(["init", "--resume", "--config", "./devforge.config.json"]),
+    /--resume.*--config/i,
+  );
+});
+
+test("cli requires a feature name for add", () => {
+  assert.throws(
+    () => parseArgs(["add"]),
+    /Missing feature for `devforge add`/i,
   );
 });

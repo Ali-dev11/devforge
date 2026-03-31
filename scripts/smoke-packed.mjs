@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -70,12 +70,31 @@ try {
       resolve(installDir, "node_modules/@ali-dev11/devforge/dist/bin/devforge.js"),
       "init",
       "--yes",
+      "--save-config",
       "--skip-install",
       "--output",
       outputDir,
     ],
     rootDir,
   );
+
+  run(
+    "node",
+    [
+      resolve(installDir, "node_modules/@ali-dev11/devforge/dist/bin/devforge.js"),
+      "add",
+      "docker",
+    ],
+    outputDir,
+  );
+
+  if (!existsSync(resolve(outputDir, "devforge.config.json"))) {
+    throw new Error("Packed smoke run did not create devforge.config.json during `devforge init --save-config`.");
+  }
+
+  if (!existsSync(resolve(outputDir, "Dockerfile"))) {
+    throw new Error("Packed smoke run did not create Dockerfile after `devforge add docker`.");
+  }
 } finally {
   rmSync(workspace, { recursive: true, force: true });
 }

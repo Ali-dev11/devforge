@@ -1,4 +1,5 @@
 export { runCli } from "./cli.js";
+export { applyAddFeature, runAddCommand } from "./commands/add.js";
 export { runInitCommand } from "./commands/init.js";
 export { buildAiRuleFiles } from "./engines/ai-rules.js";
 export { normalizeProjectPlan } from "./engines/decision.js";

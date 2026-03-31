@@ -1,4 +1,10 @@
-import { dirname, join } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
+import {
+  defaultConfigOutputPath,
+  readProjectPlanConfig,
+  resolveConfigPath,
+  writeProjectPlanConfig,
+} from "../config.js";
 import { buildRuntimeGuidance } from "../guidance.js";
 import { detectEnvironment } from "../engines/environment.js";
 import { generateProject } from "../engines/generator.js";
@@ -96,6 +102,13 @@ function printStackNotes(notes: string[]): void {
   }
 }
 
+function pathIsInsideDir(path: string, dir: string): boolean {
+  const resolvedPath = resolve(path);
+  const resolvedDir = resolve(dir);
+
+  return resolvedPath === resolvedDir || resolvedPath.startsWith(`${resolvedDir}${sep}`);
+}
+
 export async function runInitCommand(options: CliOptions): Promise<void> {
   const environment = detectEnvironment();
   const resumeState = options.resume ? await loadResumePlan() : undefined;
@@ -109,9 +122,19 @@ export async function runInitCommand(options: CliOptions): Promise<void> {
   info(`Node.js: ${environment.nodeVersion}`);
   step(`Package manager preference: ${environment.recommendedPackageManager}`);
 
-  const seed = resumeState?.plan ?? buildDefaultPlan(environment, options);
-  const collectedPlan = await collectProjectPlan(environment, options, seed);
-  await persistResume(collectedPlan);
+  const collectedPlan = options.configPath
+    ? await readProjectPlanConfig(options.configPath, environment, options)
+    : await collectProjectPlan(
+        environment,
+        options,
+        resumeState?.plan ?? buildDefaultPlan(environment, options),
+      );
+
+  if (options.configPath) {
+    step(`Loaded config from ${resolveConfigPath(options.configPath)}`);
+  } else {
+    await persistResume(collectedPlan);
+  }
 
   const { plan, warnings } = normalizeProjectPlan(collectedPlan, environment);
 
@@ -119,6 +142,20 @@ export async function runInitCommand(options: CliOptions): Promise<void> {
     for (const warning of warnings) {
       warn(warning);
     }
+  }
+
+  const saveConfigPath = options.saveConfig
+    ? options.saveConfigPath
+      ? resolveConfigPath(options.saveConfigPath)
+      : defaultConfigOutputPath(plan.targetDir)
+    : undefined;
+  const deferSaveConfigUntilAfterGenerate = saveConfigPath
+    ? !options.preflightOnly && pathIsInsideDir(saveConfigPath, plan.targetDir)
+    : false;
+
+  if (saveConfigPath && !deferSaveConfigUntilAfterGenerate) {
+    await writeProjectPlanConfig(saveConfigPath, plan);
+    step(`Saved normalized config to ${saveConfigPath}`);
   }
 
   const preflightReport = buildPlanPreflightReport(plan, environment);
@@ -157,6 +194,11 @@ export async function runInitCommand(options: CliOptions): Promise<void> {
       step(message);
     },
   });
+
+  if (saveConfigPath && deferSaveConfigUntilAfterGenerate) {
+    await writeProjectPlanConfig(saveConfigPath, plan);
+    step(`Saved normalized config to ${saveConfigPath}`);
+  }
 
   if (plan.git.setupSsh) {
     warn("SSH setup was requested; DevForge generated guidance in the README instead of editing system SSH config.");
