@@ -33,9 +33,12 @@ DevForge CLI turns project intent into a runnable JavaScript or TypeScript repos
 ## Command Reference
 
 - `npx --yes @ali-dev11/devforge@latest`: run DevForge without a global install.
+- `npx --yes @ali-dev11/devforge@latest doctor`: inspect local machine readiness before generating a scaffold.
+- `npx --yes @ali-dev11/devforge@latest init --preflight-only`: run stack-aware checks for the chosen plan without writing files yet.
 - `Project prompts`: use the [Prompt Reference](./prompts.md) when you want to know what a question changes before answering it.
 - `npm run check`: validate the DevForge repository itself before pushing changes.
 - `npm run smoke`: verify a non-interactive scaffold path.
+- `npm run smoke:packed`: validate the built npm tarball instead of only the source tree.
 - `npm run runtime:matrix -- --scenario ...`: validate generated installs, builds, and runtime behavior for representative stacks.
 - `npm run docs:changelog`: refresh the GitHub Pages changelog page from the main changelog file.
 

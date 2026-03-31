@@ -47,12 +47,40 @@ function requiresElevatedFrontendNode(plan: ProjectPlan): boolean {
   return Boolean(plan.frontend) || plan.intent === "chrome-extension";
 }
 
+export function minimumSupportedFrontendNodeVersionHint(): string {
+  return "20.19.0 or 22.12.0+";
+}
+
+export function isNodeVersionSupportedForFrontendToolchains(
+  value: string | undefined,
+): boolean {
+  const parsed = parseNodeVersion(value);
+  if (!parsed) {
+    return true;
+  }
+
+  const minimumNode20: ParsedNodeVersion = { major: 20, minor: 19, patch: 0 };
+  const minimumNode22: ParsedNodeVersion = { major: 22, minor: 12, patch: 0 };
+
+  if (parsed.major === 20) {
+    return compareNodeVersions(parsed, minimumNode20) >= 0;
+  }
+
+  if (parsed.major === 22) {
+    return compareNodeVersions(parsed, minimumNode22) >= 0;
+  }
+
+  return parsed.major > 22;
+}
+
 export function generatedProjectNodeEngine(plan: ProjectPlan): string {
   return requiresElevatedFrontendNode(plan) ? ">=20.19.0 || >=22.12.0" : ">=20.0.0";
 }
 
 export function minimumSupportedNodeVersionHint(plan: ProjectPlan): string {
-  return requiresElevatedFrontendNode(plan) ? "20.19.0 or 22.12.0+" : "20.0.0";
+  return requiresElevatedFrontendNode(plan)
+    ? minimumSupportedFrontendNodeVersionHint()
+    : "20.0.0";
 }
 
 export function isNodeVersionSupportedForPlan(
@@ -68,16 +96,5 @@ export function isNodeVersionSupportedForPlan(
     return parsed.major > 20 || (parsed.major === 20 && parsed.minor >= 0);
   }
 
-  const minimumNode20: ParsedNodeVersion = { major: 20, minor: 19, patch: 0 };
-  const minimumNode22: ParsedNodeVersion = { major: 22, minor: 12, patch: 0 };
-
-  if (parsed.major === 20) {
-    return compareNodeVersions(parsed, minimumNode20) >= 0;
-  }
-
-  if (parsed.major === 22) {
-    return compareNodeVersions(parsed, minimumNode22) >= 0;
-  }
-
-  return parsed.major > 22;
+  return isNodeVersionSupportedForFrontendToolchains(value);
 }

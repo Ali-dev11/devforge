@@ -22,6 +22,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run check
+      - run: npm run smoke:packed
 
   generated-runtime-matrix:
     name: generated-runtime-matrix (${{ matrix.group.name }})

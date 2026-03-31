@@ -89,9 +89,10 @@ export type LicenseChoice =
   | "Proprietary";
 
 export interface CliOptions {
-  command: "init" | "help" | "version";
+  command: "init" | "help" | "version" | "doctor";
   resume: boolean;
   skipInstall: boolean;
+  preflightOnly?: boolean;
   yes: boolean;
   outputDir?: string;
   projectName?: string;
@@ -114,6 +115,7 @@ export interface EnvironmentInfo {
     docker?: BinaryStatus;
     corepack?: BinaryStatus;
     fnm?: BinaryStatus;
+    ssh?: BinaryStatus;
   };
 }
 
@@ -263,4 +265,13 @@ export interface PostCreateGuidance {
   requiredBeforeRun: AdvisoryItem[];
   recommended: AdvisoryItem[];
   stackNotes: string[];
+}
+
+export interface PreflightReport {
+  title: string;
+  healthy: AdvisoryItem[];
+  requiredBeforeRun: AdvisoryItem[];
+  recommended: AdvisoryItem[];
+  nextCommands: string[];
+  hasBlockingIssues: boolean;
 }

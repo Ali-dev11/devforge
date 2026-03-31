@@ -39,6 +39,18 @@ npm install -g @ali-dev11/devforge
 devforge
 ```
 
+Machine readiness check:
+
+```bash
+npx --yes @ali-dev11/devforge@latest doctor
+```
+
+Plan-only preflight:
+
+```bash
+npx --yes @ali-dev11/devforge@latest init --preflight-only
+```
+
 ## What The CLI Asks You
 
 DevForge keeps core setup decisions required, and pushes the rest behind optional customization steps.
@@ -82,6 +94,7 @@ The full prompt-by-prompt guide is here:
 
 ```bash
 npm install
+npm run dev -- --help
 npm run lint
 npm run typecheck
 npm run test
@@ -89,6 +102,7 @@ npm run build
 npm run check
 npm run docs:changelog
 npm run smoke
+npm run smoke:packed
 npm run runtime:matrix -- --scenario backend-hono --scenario cli-tool
 ```
 
@@ -102,6 +116,7 @@ npm run runtime:matrix -- --scenario backend-hono --scenario cli-tool
 - `npm run check` is the main contributor safety command because it combines linting, typechecking, tests, and build verification.
 - `npm run docs:changelog` refreshes the GitHub Pages changelog page from `CHANGELOG.md`.
 - `npm run smoke` verifies a non-interactive scaffold run end to end.
+- `npm run smoke:packed` packs the actual npm tarball, installs it into a temp directory, and verifies the published artifact shape instead of only the source checkout.
 - `npm run runtime:matrix -- --scenario ...` installs, builds, and verifies generated projects so the scaffold output is tested as a product, not just as source code.
 
 ## Repository Docs
