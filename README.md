@@ -45,10 +45,23 @@ Machine readiness check:
 npx --yes @ali-dev11/devforge@latest doctor
 ```
 
+Add managed features later:
+
+```bash
+npx --yes @ali-dev11/devforge@latest add testing
+npx --yes @ali-dev11/devforge@latest add docker
+```
+
 Plan-only preflight:
 
 ```bash
 npx --yes @ali-dev11/devforge@latest init --preflight-only
+```
+
+Config-driven scaffold:
+
+```bash
+npx --yes @ali-dev11/devforge@latest init --config ./devforge.config.json --output ./my-app
 ```
 
 ## What The CLI Asks You
@@ -118,6 +131,21 @@ npm run runtime:matrix -- --scenario backend-hono --scenario cli-tool
 - `npm run smoke` verifies a non-interactive scaffold run end to end.
 - `npm run smoke:packed` packs the actual npm tarball, installs it into a temp directory, and verifies the published artifact shape instead of only the source checkout.
 - `npm run runtime:matrix -- --scenario ...` installs, builds, and verifies generated projects so the scaffold output is tested as a product, not just as source code.
+
+## Config As Code
+
+- `devforge init --save-config` saves the resolved scaffold plan as `devforge.config.json` in the generated project by default.
+- `devforge init --save-config ./configs/web.json` saves the normalized plan to a custom location.
+- `devforge init --config ./devforge.config.json --output ./my-app` replays a saved scaffold non-interactively.
+- `--output` and `--name` can still override the saved config at runtime, so the same config file stays reusable across multiple projects.
+
+## Add Features Later
+
+- `devforge add testing` enables the scaffold's recommended test runner for the saved stack and writes the matching test config and starter tests.
+- `devforge add docker` adds the generated `Dockerfile` and `.dockerignore` for the current DevForge project.
+- `devforge add github-actions` adds the generated CI workflow for the current project stack.
+- `devforge add ai-rules` restores `AGENTS.md`, `.cursor`, `.claude`, and the AI rule source docs when those were skipped initially.
+- `devforge add` works only inside DevForge-generated projects because it reads `.devforge/project-plan.json` to update managed files safely.
 
 ## Repository Docs
 

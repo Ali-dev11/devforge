@@ -70,6 +70,9 @@ test("generator returns a runnable default frontend scaffold", () => {
   assert.match(readmeFile.content, /Common Commands/);
   assert.match(readmeFile.content, /Command Guide/);
   assert.match(readmeFile.content, /Tooling Defaults/);
+  assert.match(readmeFile.content, /devforge\.config\.json/);
+  assert.match(readmeFile.content, /devforge init --config \.\/devforge\.config\.json --output \.\/my-app/);
+  assert.match(readmeFile.content, /devforge add testing/);
   assert.match(appFile.content, /Project details/);
   assert.match(appFile.content, /Created by Ali-dev11 via @ali-dev11\/devforge/);
   assert.match(
@@ -325,10 +328,14 @@ test("remix bun scaffolds include runtime guidance, CLI dependencies, and typed-
   assert.match(readmeFile.content, /npx playwright install/);
   assert.match(readmeFile.content, /bun run dev/);
   assert.match(readmeFile.content, /bun run build/);
+  assert.match(readmeFile.content, /devforge init --save-config/);
+  assert.match(readmeFile.content, /devforge add docker/);
   assert.match(readmeFile.content, /instead of raw package-manager bundler commands/i);
   assert.match(gettingStartedFile.content, /One-Time Requirements/);
   assert.match(gettingStartedFile.content, /Recommended Setup/);
   assert.match(gettingStartedFile.content, /nvm use/);
+  assert.match(gettingStartedFile.content, /devforge init --config \.\/devforge\.config\.json --output \.\/my-app/);
+  assert.match(gettingStartedFile.content, /devforge add github-actions/);
 });
 
 test("playwright docs and commands stay package-manager aware", () => {
@@ -353,7 +360,10 @@ test("playwright docs and commands stay package-manager aware", () => {
   assert.match(readmeFile.content, /pnpm install/);
   assert.match(readmeFile.content, /pnpm run dev/);
   assert.match(readmeFile.content, /pnpm run check/);
+  assert.match(readmeFile.content, /devforge init --save-config/);
+  assert.match(gettingStartedFile.content, /devforge add ai-rules/);
   assert.match(gettingStartedFile.content, /npx playwright install/);
+  assert.match(gettingStartedFile.content, /devforge init --config \.\/devforge\.config\.json --output \.\/my-app/);
   assert.match(playwrightConfigFile.content, /command: "pnpm run dev"/);
 });
 

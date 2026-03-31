@@ -26,6 +26,8 @@ import type {
 } from "./types.js";
 
 export const RESUME_STATE_PATH = ".devforge/session.json";
+export const PROJECT_PLAN_PATH = ".devforge/project-plan.json";
+export const DEFAULT_CONFIG_FILE_NAME = "devforge.config.json";
 export const DEFAULT_REMOTE_APPS = ["catalog", "dashboard"];
 export const DEFAULT_RULE_CATEGORIES: RuleCategory[] = [
   "core",

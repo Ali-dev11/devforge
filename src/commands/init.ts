@@ -1,4 +1,10 @@
 import { dirname, join } from "node:path";
+import {
+  defaultConfigOutputPath,
+  readProjectPlanConfig,
+  resolveConfigPath,
+  writeProjectPlanConfig,
+} from "../config.js";
 import { buildRuntimeGuidance } from "../guidance.js";
 import { detectEnvironment } from "../engines/environment.js";
 import { generateProject } from "../engines/generator.js";
@@ -109,9 +115,19 @@ export async function runInitCommand(options: CliOptions): Promise<void> {
   info(`Node.js: ${environment.nodeVersion}`);
   step(`Package manager preference: ${environment.recommendedPackageManager}`);
 
-  const seed = resumeState?.plan ?? buildDefaultPlan(environment, options);
-  const collectedPlan = await collectProjectPlan(environment, options, seed);
-  await persistResume(collectedPlan);
+  const collectedPlan = options.configPath
+    ? await readProjectPlanConfig(options.configPath, environment, options)
+    : await collectProjectPlan(
+        environment,
+        options,
+        resumeState?.plan ?? buildDefaultPlan(environment, options),
+      );
+
+  if (options.configPath) {
+    step(`Loaded config from ${resolveConfigPath(options.configPath)}`);
+  } else {
+    await persistResume(collectedPlan);
+  }
 
   const { plan, warnings } = normalizeProjectPlan(collectedPlan, environment);
 
@@ -119,6 +135,17 @@ export async function runInitCommand(options: CliOptions): Promise<void> {
     for (const warning of warnings) {
       warn(warning);
     }
+  }
+
+  const saveConfigPath = options.saveConfig
+    ? options.saveConfigPath
+      ? resolveConfigPath(options.saveConfigPath)
+      : defaultConfigOutputPath(plan.targetDir)
+    : undefined;
+
+  if (saveConfigPath) {
+    await writeProjectPlanConfig(saveConfigPath, plan);
+    step(`Saved normalized config to ${saveConfigPath}`);
   }
 
   const preflightReport = buildPlanPreflightReport(plan, environment);

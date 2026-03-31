@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { buildAiRuleFiles } from "./ai-rules.js";
 import { buildProjectFiles } from "../templates.js";
+import { PROJECT_PLAN_PATH } from "../constants.js";
 import type {
   EnvironmentInfo,
   GeneratedProjectResult,
@@ -48,11 +49,11 @@ export async function generateProject(
       }
     : undefined);
 
-  await writeJson(join(plan.targetDir, ".devforge", "project-plan.json"), plan);
+  await writeJson(join(plan.targetDir, PROJECT_PLAN_PATH), plan);
   options?.onWrite?.({
     current: totalWrites,
     total: totalWrites,
-    path: join(plan.targetDir, ".devforge", "project-plan.json"),
+    path: join(plan.targetDir, PROJECT_PLAN_PATH),
   });
 
   return {

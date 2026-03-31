@@ -6,6 +6,25 @@ The format follows Keep a Changelog and the version numbers follow Semantic Vers
 
 ## [Unreleased]
 
+## [0.4.5] - 2026-03-31
+
+### Added
+
+- Added config-as-code support with `devforge init --config <path>` so saved scaffold plans can be replayed non-interactively.
+- Added `devforge init --save-config [path]` so interactive runs can emit a reusable `devforge.config.json` file for teams and future scaffolds.
+- Added config regression coverage that round-trips normalized plans through saved config files and verifies scaffold output stays deterministic.
+- Added `devforge add <feature>` for managed post-scaffold updates, with initial support for `testing`, `docker`, `github-actions`, and `ai-rules`.
+
+### Changed
+
+- Extended CLI help, generated project docs, and repository docs to explain the new config-driven workflow and how reusable scaffold plans fit alongside interactive prompts.
+- Routed config-driven runs through the same environment defaults and normalization flow as interactive runs so support-matrix rules stay consistent across both entrypoints.
+- Extended the packed npm-artifact smoke path so it now exercises `devforge add docker` after scaffold creation, verifying the shipped CLI can perform managed post-scaffold updates.
+
+### Fixed
+
+- Made post-scaffold feature application metadata-driven by reading `.devforge/project-plan.json`, which avoids stack guessing and keeps repeated `devforge add` runs idempotent.
+
 ## [0.4.4] - 2026-03-31
 
 ### Added
