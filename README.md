@@ -22,6 +22,7 @@ DevForge helps you:
 - AI rule outputs for Cursor, Claude, Codex, and `AGENTS.md`
 - testing setup for Vitest, Jest, Playwright, and Cypress
 - optional ESLint, Prettier, Husky, Commitlint, Docker, and GitHub Actions setup
+- deployment baselines for verified Vercel, Netlify, and Docker Compose scaffold pairs
 - generated docs, changelog-ready project metadata, and baseline repository hygiene
 
 ## Quick Start
@@ -62,6 +63,18 @@ Config-driven scaffold:
 
 ```bash
 npx --yes @ali-dev11/devforge@latest init --config ./devforge.config.json --output ./my-app
+```
+
+Built-in preset scaffold:
+
+```bash
+npx --yes @ali-dev11/devforge@latest init --preset frontend-app --output ./my-app
+```
+
+Refresh managed docs, workflows, and tooling:
+
+```bash
+npx --yes @ali-dev11/devforge@latest upgrade
 ```
 
 ## What The CLI Asks You
@@ -137,6 +150,7 @@ npm run runtime:matrix -- --scenario backend-hono --scenario cli-tool
 - `devforge init --save-config` saves the resolved scaffold plan as `devforge.config.json` in the generated project by default.
 - `devforge init --save-config ./configs/web.json` saves the normalized plan to a custom location.
 - `devforge init --config ./devforge.config.json --output ./my-app` replays a saved scaffold non-interactively.
+- `devforge init --preset frontend-app` seeds the flow with a built-in preset, and `--preset ./preset.json` lets teams keep reusable local preset files under version control.
 - `--output` and `--name` can still override the saved config at runtime, so the same config file stays reusable across multiple projects.
 
 ## Add Features Later
@@ -146,6 +160,20 @@ npm run runtime:matrix -- --scenario backend-hono --scenario cli-tool
 - `devforge add github-actions` adds the generated CI workflow for the current project stack.
 - `devforge add ai-rules` restores `AGENTS.md`, `.cursor`, `.claude`, and the AI rule source docs when those were skipped initially.
 - `devforge add` works only inside DevForge-generated projects because it reads `.devforge/project-plan.json` to update managed files safely.
+
+## Upgrade Managed Surfaces
+
+- `devforge upgrade` refreshes DevForge-managed docs, workflows, AI rule files, deployment baselines, and core tooling files from the saved `.devforge/project-plan.json`.
+- Upgrade is intentionally conservative: if a managed file no longer matches the previous generated baseline, DevForge skips it instead of overwriting local edits.
+- New generated docs and workflows now carry a DevForge managed marker so plan-driven upgrades can safely refresh those files later.
+
+## Deployment Targets
+
+- Verified deployment targets are offered only for supported stack pairs.
+- `react-vite` frontend apps can target `Vercel` or `Netlify`.
+- `nextjs` frontend apps can target `Vercel`.
+- `express`, `fastify`, and `hono` backend APIs can target `Docker Compose`.
+- Deployment generation includes target-specific config files and optional manual deploy workflows when GitHub Actions is enabled.
 
 ## Repository Docs
 

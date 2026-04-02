@@ -21,14 +21,18 @@ npx --yes @ali-dev11/devforge@latest doctor
 ## Config-As-Code Workflow
 
 ```bash
+npx --yes @ali-dev11/devforge@latest init --preset frontend-app --output ./my-app
 npx --yes @ali-dev11/devforge@latest init --yes --save-config
 npx --yes @ali-dev11/devforge@latest init --config ./devforge.config.json --output ./my-app
+npx --yes @ali-dev11/devforge@latest upgrade
 npx --yes @ali-dev11/devforge@latest add testing
 ```
 
+- `--preset` seeds the scaffold from a built-in preset name or a local preset JSON file so teams can standardize starting points.
 - `--save-config` writes the normalized project plan to `devforge.config.json` so the same scaffold can be replayed later.
 - `--config` runs the generator non-interactively from a saved plan while still letting `--output` or `--name` override the destination.
 - Config-driven runs pass through the same normalization and compatibility checks as interactive runs, so invalid hand-written combinations are still corrected or rejected with guidance.
+- `devforge upgrade` refreshes DevForge-managed docs, workflows, AI rules, deployment files, and core tooling surfaces while skipping files that no longer match the previous generated baseline.
 - `devforge add <feature>` updates an existing DevForge project by reading `.devforge/project-plan.json` and rewriting only the managed files for that feature.
 
 ## Repository Commands
@@ -64,8 +68,10 @@ npm run runtime:matrix -- --scenario backend-hono --scenario cli-tool
 
 - Prefer `npm run smoke` for quick CLI sanity checks.
 - Run `npx --yes @ali-dev11/devforge@latest init --preflight-only` when you want stack-aware readiness checks without writing a new project yet.
+- Use `npx --yes @ali-dev11/devforge@latest init --preset frontend-app` when validating built-in preset coverage or a local preset file path.
 - Use `npx --yes @ali-dev11/devforge@latest init --save-config` when you want an interactive run to become a reusable team preset later.
 - Use `npx --yes @ali-dev11/devforge@latest init --config ./devforge.config.json --output ./my-app` when validating reproducible scaffold output.
+- Use `npx --yes @ali-dev11/devforge@latest upgrade` when changing generated docs, workflows, deployment baselines, or other managed tooling surfaces.
 - Use `npx --yes @ali-dev11/devforge@latest add testing`, `add docker`, `add github-actions`, or `add ai-rules` when validating managed post-scaffold updates.
 - Use `npm run runtime:matrix` when changing templates, prompts, package-manager behavior, or generated runtime surfaces.
 - Use `npm run smoke:packed` when changing the package entrypoints, published files, CLI dispatch, or install-time behavior.
