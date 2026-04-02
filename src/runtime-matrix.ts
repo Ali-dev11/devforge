@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -318,19 +319,121 @@ async function stopProcess(processRef: StartedProcess): Promise<void> {
   await waitForProcessExit(processRef, 5_000);
 }
 
+function parseLoopbackRuntimeUrl(rawUrl: string): URL {
+  const parsed = new URL(rawUrl);
+
+  if (parsed.protocol !== "http:") {
+    throw new Error(`Runtime matrix only supports loopback HTTP probes. Received: ${rawUrl}`);
+  }
+
+  if (!["127.0.0.1", "localhost", "::1"].includes(parsed.hostname)) {
+    throw new Error(`Runtime matrix refused a non-loopback probe target: ${rawUrl}`);
+  }
+
+  return parsed;
+}
+
+async function probeLoopbackHttpStatus(
+  rawUrl: string,
+  timeoutMs = 5_000,
+): Promise<{ statusCode: number; statusMessage: string }> {
+  const parsed = parseLoopbackRuntimeUrl(rawUrl);
+  const port = Number(parsed.port || "80");
+  const path = `${parsed.pathname || "/"}${parsed.search}`;
+
+  return new Promise((resolve, reject) => {
+    const socket = new Socket();
+    let settled = false;
+    let buffer = "";
+
+    const finish = (error?: Error, result?: { statusCode: number; statusMessage: string }): void => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      clearTimeout(timer);
+      socket.removeAllListeners();
+
+      if (!socket.destroyed) {
+        socket.destroy();
+      }
+
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      resolve(result!);
+    };
+
+    const timer = setTimeout(() => {
+      finish(new Error(`Timed out waiting for an HTTP response from ${rawUrl}`));
+    }, timeoutMs);
+
+    socket.setEncoding("utf8");
+
+    socket.on("error", (error) => {
+      finish(error instanceof Error ? error : new Error(String(error)));
+    });
+
+    socket.on("data", (chunk: string) => {
+      buffer += chunk;
+      const lineBreakIndex = buffer.indexOf("\r\n");
+      if (lineBreakIndex === -1) {
+        return;
+      }
+
+      const statusLine = buffer.slice(0, lineBreakIndex);
+      const match = /^HTTP\/\d\.\d (\d{3})(?: (.*))?$/.exec(statusLine);
+
+      if (!match) {
+        finish(new Error(`Unexpected HTTP status line from ${rawUrl}: ${statusLine}`));
+        return;
+      }
+
+      finish(undefined, {
+        statusCode: Number(match[1]),
+        statusMessage: match[2] ?? "",
+      });
+    });
+
+    socket.on("close", () => {
+      if (!settled) {
+        finish(new Error(`Connection closed before ${rawUrl} returned an HTTP status line`));
+      }
+    });
+
+    socket.connect(port, parsed.hostname, () => {
+      socket.write(
+        [
+          `GET ${path || "/"} HTTP/1.1`,
+          `Host: ${parsed.host}`,
+          "Connection: close",
+          "Accept: */*",
+          "",
+          "",
+        ].join("\r\n"),
+      );
+    });
+  });
+}
+
 async function waitForHttpOk(url: string, timeoutMs = 30_000): Promise<void> {
   const startedAt = Date.now();
   let lastError: unknown;
 
   while (Date.now() - startedAt < timeoutMs) {
     try {
-      const response = await fetch(url);
+      const response = await probeLoopbackHttpStatus(url);
 
-      if (response.ok) {
+      if (response.statusCode >= 200 && response.statusCode < 300) {
         return;
       }
 
-      lastError = new Error(`Unexpected HTTP response from ${url}: ${response.status} ${response.statusText}`);
+      lastError = new Error(
+        `Unexpected HTTP response from ${url}: ${response.statusCode} ${response.statusMessage}`,
+      );
     } catch (error) {
       lastError = error;
     }

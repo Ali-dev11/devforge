@@ -34,6 +34,7 @@ Track what changed in DevForge CLI across releases, including scaffolding behavi
 - Fixed upgrade behavior for plan changes by allowing managed-marker files such as README and generated docs to refresh even when the stored project plan changes between runs.
 - Fixed the generated deployment matrix so verified deployment targets are actually exercised by repository CI instead of existing only in unit-level checks.
 - Fixed generator-side source sanitization for user-controlled strings embedded into generated TypeScript and JavaScript files, including Remix metadata exports and CLI/runtime metadata payloads.
+- Fixed runtime-matrix loopback HTTP verification so it no longer relies on fetch-based downloads for local readiness checks, which removes the insecure-download CodeQL finding without weakening scenario coverage.
 
 ## [0.4.5] - 2026-04-01
 
