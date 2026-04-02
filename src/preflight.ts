@@ -1,5 +1,6 @@
 import type { AdvisoryItem, EnvironmentInfo, PreflightReport, ProjectPlan } from "./types.js";
 import {
+  canUsePackageManager,
   hasInstalledPlaywrightBrowsers,
   hasLocalSshPublicKey,
   hasSystemTool,
@@ -242,10 +243,13 @@ export function buildPlanPreflightReport(
     });
   }
 
-  if (environment.packageManagers[plan.packageManager].installed) {
+  if (canUsePackageManager(environment, plan.packageManager)) {
     healthy.push({
       title: `${plan.packageManager} is available`,
-      detail: `DevForge can install and run the generated ${plan.packageManager} scripts on this machine.`,
+      detail:
+        environment.packageManagers[plan.packageManager].installed
+          ? `DevForge can install and run the generated ${plan.packageManager} scripts on this machine.`
+          : `DevForge can activate and run ${plan.packageManager} through Corepack on this machine.`,
     });
   } else {
     hasBlockingIssues = true;

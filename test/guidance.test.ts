@@ -86,6 +86,7 @@ test("runtime guidance prints macOS Bun install commands when Bun is selected bu
 
 test("runtime guidance prints Linux-specific Playwright and custom Node setup commands", () => {
   const environment = createEnvironment("linux");
+  environment.nodeVersion = "v23.11.0";
   const plan = buildDefaultPlan(environment, cliOptions);
   plan.nodeStrategy = "custom";
   plan.customNodeVersion = "23.11.0";
@@ -106,7 +107,7 @@ test("runtime guidance prints Linux-specific Playwright and custom Node setup co
 
   assert.match(
     guidance.requiredBeforeRun.map((item) => `${item.title} ${item.command ?? ""}`).join("\n"),
-    /Use a compatible Node\.js version[\s\S]*fnm install 23\.11\.0 && fnm use 23\.11\.0/i,
+    /Use the selected Node\.js version[\s\S]*fnm install 23\.11\.0 && fnm use 23\.11\.0/i,
   );
   assert.match(
     guidance.requiredBeforeRun.map((item) => `${item.title} ${item.command ?? ""}`).join("\n"),
@@ -176,6 +177,79 @@ test("runtime guidance falls back to npm when pnpm is selected but Corepack is u
     guidance.requiredBeforeRun.map((item) => `${item.title} ${item.command ?? ""}`).join("\n"),
     /Install or enable pnpm[\s\S]*npm install -g pnpm/i,
   );
+});
+
+test("runtime guidance suppresses runnable next commands when dependencies exist but the selected package manager is unavailable", () => {
+  const environment = createEnvironment("darwin");
+  environment.nodeVersion = "v22.12.0";
+  environment.packageManagers.pnpm = { installed: false };
+  environment.systemTools = {
+    git: { installed: true, version: "2.45.1", path: "/usr/bin/git" },
+    docker: { installed: true, version: "27.0.0", path: "/usr/local/bin/docker" },
+    corepack: { installed: false },
+    fnm: { installed: true, version: "1.37.1", path: "/usr/local/bin/fnm" },
+  };
+
+  const plan = buildDefaultPlan(environment, cliOptions);
+  plan.packageManager = "pnpm";
+  plan.targetDir = "/tmp/devforge-guidance-test/existing-checkout";
+
+  const guidance = buildRuntimeGuidance(
+    plan,
+    environment,
+    createInstallResult({
+      attempted: false,
+      succeeded: true,
+      skipped: true,
+      available: false,
+      command: "pnpm install",
+    }),
+    "/tmp",
+  );
+
+  assert.deepEqual(guidance.nextCommands, []);
+  assert.match(
+    guidance.requiredBeforeRun.map((item) => `${item.title} ${item.command ?? ""}`).join("\n"),
+    /Install or enable pnpm[\s\S]*npm install -g pnpm/i,
+  );
+});
+
+test("runtime guidance does not warn when pnpm can run through Corepack", () => {
+  const environment = createEnvironment("darwin");
+  environment.nodeVersion = "v22.12.0";
+  environment.packageManagers.pnpm = { installed: false };
+  environment.systemTools = {
+    git: { installed: true, version: "2.45.1", path: "/usr/bin/git" },
+    docker: { installed: true, version: "27.0.0", path: "/usr/local/bin/docker" },
+    corepack: { installed: true, version: "0.29.3", path: "/usr/local/bin/corepack" },
+    fnm: { installed: true, version: "1.37.1", path: "/usr/local/bin/fnm" },
+  };
+
+  const plan = buildDefaultPlan(environment, cliOptions);
+  plan.packageManager = "pnpm";
+  plan.targetDir = "/tmp/devforge-guidance-test/corepack-ready";
+
+  const guidance = buildRuntimeGuidance(
+    plan,
+    environment,
+    createInstallResult({
+      attempted: false,
+      succeeded: true,
+      skipped: true,
+      available: true,
+      command: "corepack pnpm install",
+    }),
+    "/tmp",
+  );
+
+  assert.doesNotMatch(
+    guidance.requiredBeforeRun.map((item) => item.title).join("\n"),
+    /Install or enable pnpm/i,
+  );
+  assert.deepEqual(guidance.nextCommands.slice(0, 2), [
+    "cd /tmp/devforge-guidance-test/corepack-ready",
+    "pnpm run dev",
+  ]);
 });
 
 test("runtime guidance blocks next commands when the current Node.js version cannot run the scaffold", () => {

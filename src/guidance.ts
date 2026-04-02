@@ -20,6 +20,7 @@ import type {
 } from "./types.js";
 import { REACT_FAMILY_FRAMEWORKS, VUE_FAMILY_FRAMEWORKS } from "./constants.js";
 import {
+  canUsePackageManager,
   hasFrontendLikeSurface,
   hasSystemTool,
   platformScopedDockerInstallCommand,
@@ -652,7 +653,9 @@ export function buildRuntimeGuidance(
     }
   }
 
-  if (!environment.packageManagers[plan.packageManager].installed) {
+  const packageManagerReady = canUsePackageManager(environment, plan.packageManager);
+
+  if (!packageManagerReady) {
     requiredBeforeRun.unshift({
       title: `Install or enable ${plan.packageManager}`,
       detail: `${plan.packageManager} was selected for this project, but it is not currently available in your shell. Install or enable it before using the generated ${plan.packageManager} commands.`,
@@ -703,7 +706,7 @@ export function buildRuntimeGuidance(
     });
   }
 
-  const nextCommands = installResult.dependencyInstall.succeeded
+  const nextCommands = installResult.dependencyInstall.succeeded && currentNodeSupported && packageManagerReady
     ? [
         plan.targetDir !== cwd ? `cd ${plan.targetDir}` : undefined,
         ...templateGuidance.nextCommands.filter(

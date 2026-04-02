@@ -97,6 +97,27 @@ test("plan preflight recommends Playwright, Docker, and SSH follow-up steps when
   assert.match(recommended, /Generate an SSH key[\s\S]*ssh-keygen -t ed25519/i);
 });
 
+test("plan preflight accepts pnpm through Corepack even when pnpm is not installed globally", () => {
+  const environment = createEnvironment("darwin");
+  environment.nodeVersion = "v22.12.0";
+  environment.packageManagers.pnpm = { installed: false };
+  environment.systemTools = {
+    ...environment.systemTools,
+    corepack: { installed: true, version: "0.29.3", path: "/usr/local/bin/corepack" },
+  };
+
+  const plan = buildDefaultPlan(environment, cliOptions);
+  plan.packageManager = "pnpm";
+
+  const report = buildPlanPreflightReport(plan, environment);
+  const healthy = report.healthy.map((item) => `${item.title} ${item.detail}`).join("\n");
+  const required = report.requiredBeforeRun.map((item) => item.title).join("\n");
+
+  assert.equal(report.hasBlockingIssues, false);
+  assert.match(healthy, /pnpm is available[\s\S]*Corepack/i);
+  assert.doesNotMatch(required, /Install or enable pnpm/i);
+});
+
 test("doctor report surfaces missing machine prerequisites and detects ready ones", async () => {
   const environment = createEnvironment("darwin");
   environment.nodeVersion = "v22.12.0";

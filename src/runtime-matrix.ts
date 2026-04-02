@@ -10,6 +10,7 @@ import { detectEnvironment } from "./engines/environment.js";
 import { generateProject } from "./engines/generator.js";
 import { applyIntentDefaults, buildDefaultPlan } from "./engines/prompts.js";
 import { packageManagerScriptInvocation } from "./guidance.js";
+import { canUsePackageManager } from "./remediation.js";
 import {
   isNodeVersionSupportedForPlan,
   minimumSupportedNodeVersionHint,
@@ -1251,7 +1252,7 @@ async function runScenario(
     };
   }
 
-  if (!environment.packageManagers[plan.packageManager].installed) {
+  if (!canUsePackageManager(environment, plan.packageManager)) {
     console.log(
       `[${scenario.name}] skipped because ${plan.packageManager} is not installed in the current environment.`,
     );
