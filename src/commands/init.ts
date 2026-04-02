@@ -5,6 +5,7 @@ import {
   resolveConfigPath,
   writeProjectPlanConfig,
 } from "../config.js";
+import { isBuiltinPresetName, readProjectPlanPreset } from "../presets.js";
 import { buildRuntimeGuidance } from "../guidance.js";
 import { detectEnvironment } from "../engines/environment.js";
 import { generateProject } from "../engines/generator.js";
@@ -112,6 +113,9 @@ function pathIsInsideDir(path: string, dir: string): boolean {
 export async function runInitCommand(options: CliOptions): Promise<void> {
   const environment = detectEnvironment();
   const resumeState = options.resume ? await loadResumePlan() : undefined;
+  const presetPlan = options.preset
+    ? await readProjectPlanPreset(options.preset, environment, options)
+    : undefined;
 
   if (options.resume && !resumeState) {
     throw new Error("No saved DevForge resume state was found in the current directory.");
@@ -127,13 +131,18 @@ export async function runInitCommand(options: CliOptions): Promise<void> {
     : await collectProjectPlan(
         environment,
         options,
-        resumeState?.plan ?? buildDefaultPlan(environment, options),
+        presetPlan ?? resumeState?.plan ?? buildDefaultPlan(environment, options),
       );
 
   if (options.configPath) {
     step(`Loaded config from ${resolveConfigPath(options.configPath)}`);
   } else {
     await persistResume(collectedPlan);
+    if (options.preset) {
+      step(
+        `Loaded preset ${isBuiltinPresetName(options.preset) ? options.preset : resolveConfigPath(options.preset)}`,
+      );
+    }
   }
 
   const { plan, warnings } = normalizeProjectPlan(collectedPlan, environment);

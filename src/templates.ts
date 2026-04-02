@@ -10,6 +10,7 @@ import type {
 } from "./types.js";
 import {
   buildTemplateGuidance,
+  deploymentTargetLabel,
   getDefaultLocalUrl,
   packageManagerCiInstallCommand,
   packageManagerInstallCommand,
@@ -55,8 +56,44 @@ function stringifyJson(data: unknown): string {
   return `${JSON.stringify(data, null, 2)}\n`;
 }
 
+function managedCommentPrefix(path: string): string | undefined {
+  if (path.endsWith(".md")) {
+    return "<!-- Managed by DevForge. Safe to refresh with devforge upgrade. -->";
+  }
+
+  if (
+    path.endsWith(".ts") ||
+    path.endsWith(".js") ||
+    path.endsWith(".mjs") ||
+    path.endsWith(".cjs")
+  ) {
+    return "// Managed by DevForge. Safe to refresh with devforge upgrade.";
+  }
+
+  if (
+    path.endsWith(".yml") ||
+    path.endsWith(".yaml") ||
+    path.endsWith(".toml") ||
+    path === "Dockerfile" ||
+    path.endsWith(".dockerignore") ||
+    path.endsWith(".gitignore") ||
+    path.endsWith(".gitattributes") ||
+    path.endsWith(".editorconfig") ||
+    path.startsWith(".husky/")
+  ) {
+    return "# Managed by DevForge. Safe to refresh with devforge upgrade.";
+  }
+
+  return undefined;
+}
+
 function makeFile(path: string, content: string, executable = false): GeneratedFile {
   return { path, content, executable };
+}
+
+function makeManagedFile(path: string, content: string, executable = false): GeneratedFile {
+  const prefix = managedCommentPrefix(path);
+  return makeFile(path, prefix ? `${prefix}\n\n${content}` : content, executable);
 }
 
 function pnpmPackageConfig(plan: ProjectPlan): PackageJsonShape["pnpm"] | undefined {
@@ -306,6 +343,7 @@ function projectDetailsEntries(
         ? `${toTitleCase(plan.testing.runner)} (${toTitleCase(plan.testing.environment)})`
         : "Not configured",
     },
+    { label: "Deployment", value: deploymentTargetLabel(plan.deployment.target) },
     ...extraDetails,
     { label: "Created by", value: DEVFORGE_AUTHOR },
     { label: "Package", value: DEVFORGE_PACKAGE_NAME },
@@ -478,6 +516,7 @@ function architectureDoc(plan: ProjectPlan): string {
     `- Template tier: ${toTitleCase(plan.templateTier)}`,
     `- Package manager: ${plan.packageManager}`,
     `- Node strategy: ${plan.nodeStrategy}${plan.customNodeVersion ? ` (${plan.customNodeVersion})` : ""}`,
+    `- Deployment target: ${deploymentTargetLabel(plan.deployment.target)}`,
     stack.length > 0 ? `- Stack: ${joinSentence(stack)}` : "- Stack: metadata-first blueprint",
     plan.frontend?.state !== undefined ? `- Frontend state: ${toTitleCase(plan.frontend.state)}` : undefined,
     plan.frontend?.dataFetching !== undefined
@@ -535,6 +574,7 @@ function readme(plan: ProjectPlan): string {
       : "- Testing: not configured",
     `- Tooling profiles: ESLint ${plan.tooling.eslintProfile}, Prettier ${plan.tooling.prettierProfile}, Husky ${plan.tooling.huskyProfile}`,
     `- AI rule mode: ${toTitleCase(plan.ai.ruleMode)}`,
+    `- Deployment target: ${deploymentTargetLabel(plan.deployment.target)}`,
     "",
     "## First Run Requirements",
     ...(guidance.requiredBeforeRun.length > 0
@@ -591,18 +631,28 @@ function readme(plan: ProjectPlan): string {
     "- `docs/getting-started.md` summarizes setup and first customization steps.",
     "- `docs/ai-rules-sources.md` shows which rule packs map to this stack.",
     "- `AGENTS.md` and optional tool-specific directories contain AI rules.",
+    ...(plan.deployment.target === "vercel" ? ["- `vercel.json` captures the generated Vercel deployment baseline."] : []),
+    ...(plan.deployment.target === "netlify" ? ["- `netlify.toml` captures the generated Netlify deployment baseline."] : []),
+    ...(plan.deployment.target === "docker-compose"
+      ? ["- `docker-compose.yml` defines the generated local or self-hosted Docker Compose deployment baseline."]
+      : []),
+    ...(plan.deployment.target !== "none" && plan.tooling.githubActions
+      ? ["- `.github/workflows/deploy.yml` is a manual deployment workflow example for the selected target."]
+      : []),
     "",
     "## Reproducible Scaffolding",
     "- Save a reusable config beside the project with `devforge init --save-config`.",
     "- Regenerate this shape elsewhere with `devforge init --config ./devforge.config.json --output ./my-app`.",
     "- Override the output directory or project name at runtime without editing the saved config file.",
     "- Layer optional managed features later with commands like `devforge add testing`, `devforge add docker`, `devforge add github-actions`, or `devforge add ai-rules`.",
+    "- Refresh generated docs, workflow files, and other managed surfaces later with `devforge upgrade`.",
     "",
     "## Next Steps",
     "1. Run the first prerequisite and daily commands shown above so you confirm the scaffold works before making large changes.",
     "2. Use `devforge add <feature>` if you intentionally skipped testing, Docker, GitHub Actions, or AI rules during the initial scaffold.",
-    "3. Replace placeholder files with your domain-specific UI, routes, APIs, and business logic.",
-    "4. Review the generated docs and tighten CI, deployment, and test coverage before the first production release.",
+    "3. Use `devforge upgrade` when you want to refresh DevForge-managed docs, workflows, or tooling after pulling a newer CLI release.",
+    "4. Replace placeholder files with your domain-specific UI, routes, APIs, and business logic.",
+    "5. Review the generated docs and tighten CI, deployment, and test coverage before the first production release.",
     "",
   ]
     .filter(Boolean)
@@ -665,6 +715,8 @@ function gettingStartedDoc(plan: ProjectPlan): string {
     "- Run the prerequisite commands above before treating the scaffold as ready for feature work.",
     "- Save the resolved plan with `devforge init --save-config` if you want a reusable `devforge.config.json` for future scaffolds.",
     "- Regenerate the same shape later with `devforge init --config ./devforge.config.json --output ./my-app`.",
+    "- Start future scaffolds from a reusable preset with `devforge init --preset frontend-app` or a local preset file path.",
+    "- Use `devforge upgrade` to refresh DevForge-managed docs, workflows, and tooling files after upgrading the CLI.",
     "- Use `devforge add testing`, `devforge add docker`, `devforge add github-actions`, or `devforge add ai-rules` when you want to layer those managed features in later without regenerating the whole project.",
     "- Replace starter content and placeholder services.",
     "- Fill in environment variables from `.env.example` before wiring external systems.",
@@ -3103,13 +3155,13 @@ function chromeExtensionFiles(plan: ProjectPlan): GeneratedFile[] {
 
 function docsFiles(plan: ProjectPlan): GeneratedFile[] {
   const files = [
-    makeFile("docs/architecture.md", architectureDoc(plan)),
-    makeFile("docs/getting-started.md", gettingStartedDoc(plan)),
+    makeManagedFile("docs/architecture.md", architectureDoc(plan)),
+    makeManagedFile("docs/getting-started.md", gettingStartedDoc(plan)),
     makeFile("LICENSE", licenseText(plan.metadata.license)),
   ];
 
   if (plan.metadata.generateReadme) {
-    files.unshift(makeFile("README.md", readme(plan)));
+    files.unshift(makeManagedFile("README.md", readme(plan)));
   }
 
   return files;
@@ -3126,8 +3178,10 @@ function ciWorkflow(plan: ProjectPlan): string {
     "jobs:",
     "  validate:",
     "    runs-on: ubuntu-latest",
+    "    permissions:",
+    "      contents: read",
     "    steps:",
-    "      - uses: actions/checkout@v5",
+    "      - uses: actions/checkout@v6",
   ];
 
   if (plan.packageManager === "bun") {
@@ -3158,7 +3212,44 @@ function ciWorkflow(plan: ProjectPlan): string {
   return lines.join("\n");
 }
 
+function workflowSetupSteps(plan: ProjectPlan): string[] {
+  if (plan.packageManager === "bun") {
+    return [
+      "      - uses: oven-sh/setup-bun@v2",
+      "        with:",
+      "          bun-version: latest",
+      "      - uses: actions/setup-node@v6",
+      "        with:",
+      "          node-version: 22.12.0",
+      "          cache: npm",
+      `      - run: ${packageManagerCiInstallCommand(plan.packageManager)}`,
+    ];
+  }
+
+  const lines = [
+    "      - uses: actions/setup-node@v6",
+    "        with:",
+    "          node-version: 22.12.0",
+    `          cache: ${plan.packageManager}`,
+  ];
+
+  if (plan.packageManager === "pnpm" || plan.packageManager === "yarn") {
+    lines.push("      - run: corepack enable");
+  }
+
+  lines.push(`      - run: ${packageManagerCiInstallCommand(plan.packageManager)}`);
+  return lines;
+}
+
 function dockerfile(plan: ProjectPlan): string {
+  const scripts = singlePackageScripts(plan);
+  const runtimeScript =
+    plan.deployment.target === "docker-compose" && scripts.start ? "start" : "dev";
+  const shouldBuildImage =
+    plan.deployment.target === "docker-compose" &&
+    Boolean(scripts.build) &&
+    runtimeScript === "start";
+
   if (plan.packageManager === "bun") {
     return [
       "FROM oven/bun:1.2",
@@ -3166,7 +3257,8 @@ function dockerfile(plan: ProjectPlan): string {
       "COPY package.json bun.lockb* ./",
       "RUN bun install",
       "COPY . .",
-      "CMD [\"bun\", \"run\", \"dev\"]",
+      ...(shouldBuildImage ? [`RUN ${packageManagerRunCommand(plan.packageManager, "build")}`] : []),
+      `CMD ${JSON.stringify(packageManagerRunCommand(plan.packageManager, runtimeScript).split(" "))}`,
       "",
     ].join("\n");
   }
@@ -3176,7 +3268,6 @@ function dockerfile(plan: ProjectPlan): string {
       ? ["RUN corepack enable"]
       : [];
   const installCommand = packageManagerInstallCommand(plan.packageManager);
-  const runCommand = packageManagerRunCommand(plan.packageManager, "dev").split(" ");
 
   return [
     "FROM node:22-alpine",
@@ -3185,9 +3276,141 @@ function dockerfile(plan: ProjectPlan): string {
     ...setupLines,
     `RUN ${installCommand}`,
     "COPY . .",
-    `CMD ${JSON.stringify(runCommand)}`,
+    ...(shouldBuildImage ? [`RUN ${packageManagerRunCommand(plan.packageManager, "build")}`] : []),
+    `CMD ${JSON.stringify(packageManagerRunCommand(plan.packageManager, runtimeScript).split(" "))}`,
     "",
   ].join("\n");
+}
+
+function vercelConfig(plan: ProjectPlan): string {
+  const data: Record<string, unknown> = {
+    version: 2,
+    installCommand: packageManagerInstallCommand(plan.packageManager),
+    buildCommand: packageManagerRunCommand(plan.packageManager, "build"),
+  };
+
+  if (plan.frontend?.framework === "react-vite") {
+    data.outputDirectory = "dist";
+  }
+
+  return stringifyJson(data);
+}
+
+function netlifyConfig(plan: ProjectPlan): string {
+  return [
+    "[build]",
+    `command = "${packageManagerRunCommand(plan.packageManager, "build")}"`,
+    'publish = "dist"',
+    "",
+    "[build.environment]",
+    'NODE_VERSION = "22.12.0"',
+    "",
+  ].join("\n");
+}
+
+function dockerComposeFile(plan: ProjectPlan): string {
+  const serviceName = plan.projectName.replace(/[^a-z0-9-]/gi, "-").toLowerCase();
+  const internalPort = plan.intent === "backend-api" ? 3001 : 3000;
+
+  return [
+    "services:",
+    `  ${serviceName}:`,
+    "    build:",
+    "      context: .",
+    "    ports:",
+    `      - "${internalPort}:${internalPort}"`,
+    "    env_file:",
+    "      - .env.example",
+    "    restart: unless-stopped",
+    "",
+  ].join("\n");
+}
+
+function deploymentWorkflow(plan: ProjectPlan): string | undefined {
+  if (plan.deployment.target === "none" || !plan.tooling.githubActions) {
+    return undefined;
+  }
+
+  const lines = [
+    "name: Deploy",
+    "",
+    "on:",
+    "  workflow_dispatch:",
+    "",
+    "jobs:",
+    "  deploy:",
+    "    runs-on: ubuntu-latest",
+    "    permissions:",
+    "      contents: read",
+    "    steps:",
+    "      - uses: actions/checkout@v6",
+    ...workflowSetupSteps(plan),
+  ];
+
+  if (plan.deployment.target === "vercel") {
+    lines.push(
+      `      - run: ${packageManagerRunCommand(plan.packageManager, "build")}`,
+      "      - run: npm install --global vercel",
+      "      - run: vercel pull --yes --environment=production --token \"$VERCEL_TOKEN\"",
+      "        env:",
+      "          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}",
+      "          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}",
+      "          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}",
+      "      - run: vercel build --prod --token \"$VERCEL_TOKEN\"",
+      "        env:",
+      "          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}",
+      "          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}",
+      "          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}",
+      "      - run: vercel deploy --prebuilt --prod --token \"$VERCEL_TOKEN\"",
+      "        env:",
+      "          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}",
+      "          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}",
+      "          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}",
+    );
+  }
+
+  if (plan.deployment.target === "netlify") {
+    lines.push(
+      `      - run: ${packageManagerRunCommand(plan.packageManager, "build")}`,
+      "      - run: npx netlify-cli deploy --prod --dir=dist --site \"$NETLIFY_SITE_ID\" --auth \"$NETLIFY_AUTH_TOKEN\"",
+      "        env:",
+      "          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}",
+      "          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}",
+    );
+  }
+
+  if (plan.deployment.target === "docker-compose") {
+    lines.push(
+      "      - run: docker compose config",
+      "      - run: docker compose build",
+    );
+  }
+
+  lines.push("");
+  return lines.join("\n");
+}
+
+function deploymentFiles(plan: ProjectPlan): GeneratedFile[] {
+  const files: GeneratedFile[] = [];
+
+  if (plan.deployment.target === "vercel") {
+    files.push(makeFile("vercel.json", vercelConfig(plan)));
+  }
+
+  if (plan.deployment.target === "netlify") {
+    files.push(makeManagedFile("netlify.toml", netlifyConfig(plan)));
+  }
+
+  if (plan.deployment.target === "docker-compose") {
+    files.push(makeManagedFile("docker-compose.yml", dockerComposeFile(plan)));
+  }
+
+  const workflow = deploymentWorkflow(plan);
+  if (workflow) {
+    files.push(makeManagedFile(".github/workflows/deploy.yml", workflow));
+  }
+
+  return files;
 }
 
 function eslintConfigContent(plan: ProjectPlan): string {
@@ -3329,7 +3552,7 @@ function testingFiles(plan: ProjectPlan): GeneratedFile[] {
     const environment =
       plan.testing.environment === "happy-dom" ? "happy-dom" : plan.testing.environment;
     return [
-      makeFile(
+      makeManagedFile(
         `vitest.config.${configExtension}`,
         [
           "import { defineConfig } from \"vitest/config\";",
@@ -3362,7 +3585,7 @@ function testingFiles(plan: ProjectPlan): GeneratedFile[] {
 
   if (plan.testing.runner === "jest") {
     return [
-      makeFile(
+      makeManagedFile(
         `jest.config.${jestConfigExtension}`,
         [
           "const config = {",
@@ -3400,7 +3623,7 @@ function testingFiles(plan: ProjectPlan): GeneratedFile[] {
   if (plan.testing.runner === "playwright") {
     const baseUrl = getDefaultLocalUrl(plan) ?? "http://127.0.0.1:3000";
     return [
-      makeFile(
+      makeManagedFile(
         `playwright.config.${configExtension}`,
         [
           "import { defineConfig } from \"@playwright/test\";",
@@ -3438,7 +3661,7 @@ function testingFiles(plan: ProjectPlan): GeneratedFile[] {
   if (plan.testing.runner === "cypress") {
     const baseUrl = getDefaultLocalUrl(plan) ?? "http://127.0.0.1:3000";
     return [
-      makeFile(
+      makeManagedFile(
         `cypress.config.${configExtension}`,
         [
           "import { defineConfig } from \"cypress\";",
@@ -3471,8 +3694,8 @@ function testingFiles(plan: ProjectPlan): GeneratedFile[] {
 function toolingFiles(plan: ProjectPlan, options?: { includeTesting?: boolean }): GeneratedFile[] {
   const includeTesting = options?.includeTesting ?? true;
   const files: GeneratedFile[] = [
-    makeFile(".editorconfig", editorConfigContent()),
-    makeFile(".gitattributes", "* text=auto eol=lf\n"),
+    makeManagedFile(".editorconfig", editorConfigContent()),
+    makeManagedFile(".gitattributes", "* text=auto eol=lf\n"),
   ];
 
   if (usesTypeScript(plan)) {
@@ -3481,7 +3704,7 @@ function toolingFiles(plan: ProjectPlan, options?: { includeTesting?: boolean })
 
   if (plan.tooling.eslint) {
     files.push(
-      makeFile(
+      makeManagedFile(
         "eslint.config.js",
         eslintConfigContent(plan),
       ),
@@ -3501,7 +3724,7 @@ function toolingFiles(plan: ProjectPlan, options?: { includeTesting?: boolean })
 
   if (plan.tooling.commitlint) {
     files.push(
-      makeFile(
+      makeManagedFile(
         "commitlint.config.cjs",
         "module.exports = { extends: [\"@commitlint/config-conventional\"] };\n",
       ),
@@ -3510,7 +3733,7 @@ function toolingFiles(plan: ProjectPlan, options?: { includeTesting?: boolean })
 
   if (plan.tooling.githubActions) {
     files.push(
-      makeFile(
+      makeManagedFile(
         ".github/workflows/ci.yml",
         ciWorkflow(plan),
       ),
@@ -3519,12 +3742,12 @@ function toolingFiles(plan: ProjectPlan, options?: { includeTesting?: boolean })
 
   if (plan.tooling.docker) {
     files.push(
-      makeFile(
+      makeManagedFile(
         "Dockerfile",
         dockerfile(plan),
       ),
     );
-    files.push(makeFile(".dockerignore", "node_modules\ndist\n.git\ncoverage\n"));
+    files.push(makeManagedFile(".dockerignore", "node_modules\ndist\n.git\ncoverage\n"));
   }
 
   if (includeTesting) {
@@ -3690,9 +3913,10 @@ function workspaceFiles(
   const includeDefaultApps = options?.includeDefaultApps ?? true;
   const files: GeneratedFile[] = [
     workspaceRootPackageJson(plan, tool, packageManagerMetadata),
-    makeFile(".gitignore", rootGitignore()),
+    makeManagedFile(".gitignore", rootGitignore()),
     ...docsFiles(plan),
     ...toolingFiles(plan, { includeTesting: false }),
+    ...deploymentFiles(plan),
   ];
 
   if (shouldGenerateNodeVersionFile(plan)) {
@@ -3988,9 +4212,10 @@ function singlePackageFiles(
 ): GeneratedFile[] {
   const files: GeneratedFile[] = [
     singlePackageJson(plan, packageManagerMetadata),
-    makeFile(".gitignore", rootGitignore()),
+    makeManagedFile(".gitignore", rootGitignore()),
     ...docsFiles(plan),
     ...toolingFiles(plan),
+    ...deploymentFiles(plan),
   ];
 
   if (shouldGenerateNodeVersionFile(plan)) {

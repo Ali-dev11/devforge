@@ -2,6 +2,7 @@ import type { CliOptions } from "./types.js";
 import { runAddCommand } from "./commands/add.js";
 import { runDoctorCommand } from "./commands/doctor.js";
 import { runInitCommand } from "./commands/init.js";
+import { runUpgradeCommand } from "./commands/upgrade.js";
 import { DEVFORGE_VERSION } from "./version.js";
 
 function readFlagValue(flag: string, args: string[]): string {
@@ -31,9 +32,9 @@ function assertInitOnlyFlag(currentCommand: CliOptions["command"], flag: string)
   }
 }
 
-function assertInitOrAddFlag(currentCommand: CliOptions["command"], flag: string): void {
-  if (currentCommand !== "init" && currentCommand !== "add") {
-    throw new Error(`${flag} can only be used with \`devforge init\` or \`devforge add\`.`);
+function assertInstallCapableFlag(currentCommand: CliOptions["command"], flag: string): void {
+  if (currentCommand !== "init" && currentCommand !== "add" && currentCommand !== "upgrade") {
+    throw new Error(`${flag} can only be used with \`devforge init\`, \`devforge add\`, or \`devforge upgrade\`.`);
   }
 }
 
@@ -62,6 +63,9 @@ export function parseArgs(argv: string[]): CliOptions {
 
   if (firstArg === "doctor") {
     options.command = "doctor";
+    args.shift();
+  } else if (firstArg === "upgrade") {
+    options.command = "upgrade";
     args.shift();
   } else if (firstArg === "add") {
     options.command = "add";
@@ -100,12 +104,16 @@ export function parseArgs(argv: string[]): CliOptions {
         options.command = "version";
         return options;
       case "--skip-install":
-        assertInitOrAddFlag(options.command, "--skip-install");
+        assertInstallCapableFlag(options.command, "--skip-install");
         options.skipInstall = true;
         break;
       case "--preflight-only":
         assertInitOnlyFlag(options.command, "--preflight-only");
         options.preflightOnly = true;
+        break;
+      case "--preset":
+        assertInitOnlyFlag(options.command, "--preset");
+        options.preset = readFlagValue("--preset", args);
         break;
       case "--config":
         assertInitOnlyFlag(options.command, "--config");
@@ -142,6 +150,14 @@ export function parseArgs(argv: string[]): CliOptions {
     throw new Error("`--resume` cannot be used together with `--config`.");
   }
 
+  if (options.resume && options.preset) {
+    throw new Error("`--resume` cannot be used together with `--preset`.");
+  }
+
+  if (options.configPath && options.preset) {
+    throw new Error("`--config` cannot be used together with `--preset`.");
+  }
+
   return options;
 }
 
@@ -152,19 +168,23 @@ Usage:
   devforge
   devforge init
   devforge init --resume
+  devforge init --preset frontend-app
   devforge init --config ./devforge.config.json
   devforge add testing
   devforge doctor
+  devforge upgrade
 
 Commands:
   init            Start a new scaffold session
   add             Add a managed feature to an existing DevForge project
   doctor          Inspect local machine readiness for DevForge scaffolds
+  upgrade         Refresh DevForge-managed config, docs, and workflow surfaces
   help            Show command help
   version         Print the current CLI version
 
 Flags:
   --resume         Resume the last saved init session
+  --preset <name>  Seed init with a built-in preset or a preset file path
   --config <path>  Load a saved DevForge config and run non-interactively
   --save-config    Save the resolved scaffold plan as devforge.config.json
   --skip-install   Generate or update files without installing dependencies
@@ -178,9 +198,11 @@ Flags:
 Examples:
   npx @ali-dev11/devforge@latest
   npx @ali-dev11/devforge@latest doctor
+  npx @ali-dev11/devforge@latest init --preset frontend-app
   npx @ali-dev11/devforge@latest init --config ./devforge.config.json --output ./my-app
   npx @ali-dev11/devforge@latest init --yes --save-config
   npx @ali-dev11/devforge@latest add docker
+  npx @ali-dev11/devforge@latest upgrade
   npx @ali-dev11/devforge@latest init --yes --skip-install --output ./my-app
   devforge add testing --skip-install
   devforge init --preflight-only
@@ -212,6 +234,11 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
 
   if (options.command === "add") {
     await runAddCommand(options);
+    return;
+  }
+
+  if (options.command === "upgrade") {
+    await runUpgradeCommand(options);
     return;
   }
 

@@ -81,6 +81,7 @@ export type RuleCategory =
 export type StrictnessLevel = "low" | "moderate" | "strict";
 export type TestRunner = "none" | "vitest" | "jest" | "playwright" | "cypress";
 export type TestEnvironment = "none" | "node" | "jsdom" | "happy-dom" | "browser-e2e";
+export type DeploymentTarget = "none" | "vercel" | "netlify" | "docker-compose";
 export type LicenseChoice =
   | "MIT"
   | "Apache-2.0"
@@ -90,11 +91,12 @@ export type LicenseChoice =
 export type AddFeature = "testing" | "docker" | "github-actions" | "ai-rules";
 
 export interface CliOptions {
-  command: "init" | "help" | "version" | "doctor" | "add";
+  command: "init" | "help" | "version" | "doctor" | "add" | "upgrade";
   resume: boolean;
   skipInstall: boolean;
   preflightOnly?: boolean;
   configPath?: string;
+  preset?: string;
   saveConfig?: boolean;
   saveConfigPath?: string;
   addFeature?: AddFeature;
@@ -203,6 +205,10 @@ export interface MetadataConfig {
   generateEnvExample: boolean;
 }
 
+export interface DeploymentConfig {
+  target: DeploymentTarget;
+}
+
 export interface ProjectPlan {
   schemaVersion: 1;
   projectName: string;
@@ -222,6 +228,7 @@ export interface ProjectPlan {
   testing: TestingConfig;
   git: GitConfig;
   metadata: MetadataConfig;
+  deployment: DeploymentConfig;
 }
 
 export type ProjectPlanConfig = Omit<ProjectPlan, "targetDir"> & {

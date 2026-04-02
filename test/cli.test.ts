@@ -46,10 +46,25 @@ test("cli parses config-driven init and optional save-config path", () => {
   assert.equal(options.saveConfigPath, "./saved/devforge.config.json");
 });
 
+test("cli parses init preset selection", () => {
+  const options = parseArgs(["init", "--preset", "frontend-app", "--yes"]);
+
+  assert.equal(options.command, "init");
+  assert.equal(options.preset, "frontend-app");
+  assert.equal(options.yes, true);
+});
+
+test("cli parses upgrade with skip-install", () => {
+  const options = parseArgs(["upgrade", "--skip-install"]);
+
+  assert.equal(options.command, "upgrade");
+  assert.equal(options.skipInstall, true);
+});
+
 test("cli rejects init-only flags on doctor", () => {
   assert.throws(
     () => parseArgs(["doctor", "--skip-install"]),
-    /--skip-install can only be used with `devforge init` or `devforge add`/i,
+    /--skip-install can only be used with `devforge init`, `devforge add`, or `devforge upgrade`/i,
   );
 });
 
@@ -57,6 +72,13 @@ test("cli rejects config and resume together", () => {
   assert.throws(
     () => parseArgs(["init", "--resume", "--config", "./devforge.config.json"]),
     /--resume.*--config/i,
+  );
+});
+
+test("cli rejects preset and config together", () => {
+  assert.throws(
+    () => parseArgs(["init", "--preset", "frontend-app", "--config", "./devforge.config.json"]),
+    /--config.*--preset/i,
   );
 });
 

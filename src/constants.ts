@@ -6,6 +6,7 @@ import type {
   ChromeExtensionFlavor,
   DataFetchingChoice,
   DatabaseChoice,
+  DeploymentTarget,
   FrontendFramework,
   FrontendRenderingMode,
   LicenseChoice,
@@ -192,6 +193,16 @@ export const TEST_ENVIRONMENT_CHOICES: Array<{
   { title: "Node", value: "node" },
   { title: "jsdom", value: "jsdom" },
   { title: "happy-dom", value: "happy-dom" },
+];
+
+export const DEPLOYMENT_TARGET_CHOICES: Array<{
+  title: string;
+  value: DeploymentTarget;
+}> = [
+  { title: "None", value: "none" },
+  { title: "Vercel", value: "vercel" },
+  { title: "Netlify", value: "netlify" },
+  { title: "Docker Compose", value: "docker-compose" },
 ];
 
 export const BACKEND_FRAMEWORK_CHOICES: Array<{

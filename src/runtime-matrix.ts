@@ -608,13 +608,47 @@ export const runtimeScenarios: RuntimeScenario[] = [
         state: "none",
         dataFetching: "native-fetch",
       };
+      plan.deployment.target = "vercel";
+      plan.tooling.githubActions = true;
     },
-    runVerification(context) {
+    async runVerification(context) {
+      await readFile(join(context.targetDir, "vercel.json"), "utf8");
+      await readFile(join(context.targetDir, ".github", "workflows", "deploy.yml"), "utf8");
       return verifyPreviewRuntime(
         context,
         {
           script: "start",
           extraArgs: ["--hostname", "127.0.0.1", "--port", String(context.port)],
+        },
+      );
+    },
+  },
+  {
+    name: "frontend-react-vite-netlify",
+    description: "Frontend app runtime on React, Vite, and Netlify baseline",
+    intent: "frontend-app",
+    frontendFramework: "react-vite",
+    mode: "http",
+    configure(plan) {
+      plan.frontend = {
+        framework: "react-vite",
+        rendering: "client",
+        styling: "vanilla-css",
+        uiLibrary: "none",
+        state: "none",
+        dataFetching: "native-fetch",
+      };
+      plan.deployment.target = "netlify";
+      plan.tooling.githubActions = true;
+    },
+    async runVerification(context) {
+      await readFile(join(context.targetDir, "netlify.toml"), "utf8");
+      await readFile(join(context.targetDir, ".github", "workflows", "deploy.yml"), "utf8");
+      return verifyPreviewRuntime(
+        context,
+        {
+          script: "preview",
+          extraArgs: ["--host", "127.0.0.1", "--port", String(context.port)],
         },
       );
     },
@@ -829,8 +863,13 @@ export const runtimeScenarios: RuntimeScenario[] = [
         swagger: false,
         websockets: false,
       };
+      plan.deployment.target = "docker-compose";
+      plan.tooling.githubActions = true;
     },
-    runVerification(context) {
+    async runVerification(context) {
+      await readFile(join(context.targetDir, "docker-compose.yml"), "utf8");
+      await readFile(join(context.targetDir, "Dockerfile"), "utf8");
+      await readFile(join(context.targetDir, ".github", "workflows", "deploy.yml"), "utf8");
       return verifyApiRuntime(context, {
         script: "start",
         path: "/health",

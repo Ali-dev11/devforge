@@ -105,6 +105,7 @@ export function buildProjectPlanFromConfig(
   plan.testing = mergeNestedConfig(plan.testing, config.testing) ?? plan.testing;
   plan.git = mergeNestedConfig(plan.git, config.git) ?? plan.git;
   plan.metadata = mergeNestedConfig(plan.metadata, config.metadata) ?? plan.metadata;
+  plan.deployment = mergeNestedConfig(plan.deployment, config.deployment) ?? plan.deployment;
 
   if (options.projectName) {
     const normalizedProjectName = slugifyProjectName(options.projectName);

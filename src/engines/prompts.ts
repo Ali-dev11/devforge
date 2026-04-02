@@ -7,6 +7,7 @@ import {
   BACKEND_FRAMEWORK_CHOICES,
   DATA_FETCHING_CHOICES,
   DATABASE_CHOICES,
+  DEPLOYMENT_TARGET_CHOICES,
   DEFAULT_REMOTE_APPS,
   DEFAULT_RULE_CATEGORIES,
   EXTENSION_FLAVOR_CHOICES,
@@ -47,6 +48,7 @@ import { getAvailableRuleCategories } from "./decision.js";
 import { dedupe, slugifyProjectName } from "../utils/strings.js";
 import {
   chooseSupportedPackageManager,
+  getSupportedDeploymentTargets,
   getSupportedBackendLanguages,
   getSupportedDataFetchingChoicesForState,
   getDefaultRenderingMode,
@@ -220,6 +222,9 @@ export function buildDefaultPlan(
       license: "MIT",
       generateReadme: true,
       generateEnvExample: true,
+    },
+    deployment: {
+      target: "none",
     },
   };
 }
@@ -1001,6 +1006,32 @@ export async function collectProjectPlan(
       };
     }
   }
+
+  const availableDeploymentChoices = filterChoices(
+    DEPLOYMENT_TARGET_CHOICES,
+    getSupportedDeploymentTargets(plan),
+  );
+  const deploymentAnswers: { target?: ProjectPlan["deployment"]["target"] } =
+    availableDeploymentChoices.length > 1
+      ? await prompts(
+          [
+            {
+              type: "select",
+              name: "target",
+              message: "Deployment target",
+              choices: availableDeploymentChoices,
+              initial: getInitialChoiceIndex(
+                availableDeploymentChoices,
+                plan.deployment?.target ?? "none",
+              ),
+            },
+          ],
+          { onCancel: cancelHandler },
+        )
+      : {};
+  plan.deployment = {
+    target: deploymentAnswers.target ?? availableDeploymentChoices[0]?.value ?? "none",
+  };
 
   const availableTestRunnerChoices = filterChoices(
     TEST_RUNNER_CHOICES,

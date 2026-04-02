@@ -35,7 +35,7 @@ jobs:
       matrix:
         group:
           - name: frontend-core
-            args: --scenario landing-react-vite --scenario frontend-nextjs --scenario frontend-astro --scenario frontend-remix-bun
+            args: --scenario landing-react-vite --scenario frontend-nextjs --scenario frontend-react-vite-netlify --scenario frontend-astro --scenario frontend-remix-bun
           - name: frontend-apps
             args: --scenario frontend-vue-vite --scenario frontend-nuxt --scenario frontend-svelte --scenario frontend-solidjs
           - name: backends

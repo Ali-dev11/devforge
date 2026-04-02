@@ -388,6 +388,74 @@ test("jest scaffolds emit runnable cjs config for TypeScript projects", () => {
   assert.match(jestConfigFile.content, /extensionsToTreatAsEsm/);
 });
 
+test("supported deployment targets generate target-specific files and docs", () => {
+  const reactPlan = buildDefaultPlan(environment, cliOptions);
+  reactPlan.intent = "frontend-app";
+  reactPlan.frontend = {
+    framework: "react-vite",
+    rendering: "client",
+    styling: "tailwind-css",
+    uiLibrary: "shadcn-ui",
+    state: "zustand",
+    dataFetching: "tanstack-query",
+  };
+  reactPlan.deployment.target = "netlify";
+
+  const reactFiles = buildProjectFiles(reactPlan, environment);
+  const netlifyFile = reactFiles.find((file) => file.path === "netlify.toml");
+  const reactReadme = reactFiles.find((file) => file.path === "README.md");
+
+  assert.ok(netlifyFile);
+  assert.ok(reactReadme);
+  assert.match(netlifyFile.content, /publish = "dist"/);
+  assert.match(reactReadme.content, /Deployment target: Netlify/);
+
+  const nextPlan = buildDefaultPlan(environment, cliOptions);
+  nextPlan.intent = "frontend-app";
+  nextPlan.frontend = {
+    framework: "nextjs",
+    rendering: "ssr",
+    styling: "vanilla-css",
+    uiLibrary: "none",
+    state: "none",
+    dataFetching: "native-fetch",
+  };
+  nextPlan.deployment.target = "vercel";
+
+  const nextFiles = buildProjectFiles(nextPlan, environment);
+  const vercelFile = nextFiles.find((file) => file.path === "vercel.json");
+  const deployWorkflow = nextFiles.find((file) => file.path === ".github/workflows/deploy.yml");
+
+  assert.ok(vercelFile);
+  assert.ok(deployWorkflow);
+  assert.match(deployWorkflow.content, /vercel deploy --prebuilt --prod/);
+
+  const backendPlan = buildDefaultPlan(environment, cliOptions);
+  backendPlan.intent = "backend-api";
+  applyIntentDefaults(backendPlan);
+  backendPlan.backend = {
+    framework: "fastify",
+    language: "typescript",
+    auth: [],
+    orm: "none",
+    database: "none",
+    redis: false,
+    swagger: true,
+    websockets: false,
+  };
+  backendPlan.deployment.target = "docker-compose";
+  backendPlan.tooling.docker = true;
+
+  const backendFiles = buildProjectFiles(backendPlan, environment);
+  const composeFile = backendFiles.find((file) => file.path === "docker-compose.yml");
+  const dockerfile = backendFiles.find((file) => file.path === "Dockerfile");
+
+  assert.ok(composeFile);
+  assert.ok(dockerfile);
+  assert.match(composeFile.content, /3001:3001/);
+  assert.match(dockerfile.content, /CMD \["pnpm","run","start"\]/);
+});
+
 test("nestjs and javascript backend scaffolds include compatible build settings", () => {
   const nestPlan = buildDefaultPlan(environment, cliOptions);
   nestPlan.intent = "backend-api";

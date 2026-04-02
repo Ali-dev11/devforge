@@ -14,6 +14,10 @@ function modePreamble(mode: ProjectPlan["ai"]["ruleMode"]): string {
   }
 }
 
+function withManagedBanner(content: string): string {
+  return `<!-- Managed by DevForge. Safe to refresh with devforge upgrade. -->\n\n${content}`;
+}
+
 function categorySection(category: RuleCategory, plan: ProjectPlan): string {
   switch (category) {
     case "core":
@@ -98,16 +102,18 @@ function toCursorRule(unifiedRules: string): string {
     "alwaysApply: false",
     "---",
     "",
+    "<!-- Managed by DevForge. Safe to refresh with devforge upgrade. -->",
+    "",
     unifiedRules,
   ].join("\n");
 }
 
 function toClaudeRule(unifiedRules: string): string {
-  return unifiedRules;
+  return withManagedBanner(unifiedRules);
 }
 
 function toAgentsFile(plan: ProjectPlan, unifiedRules: string): string {
-  return [
+  return withManagedBanner([
     "# AGENTS.md",
     "",
     "This project was scaffolded by DevForge CLI.",
@@ -121,13 +127,13 @@ function toAgentsFile(plan: ProjectPlan, unifiedRules: string): string {
     )}`,
     "",
     unifiedRules,
-  ].join("\n");
+  ].join("\n"));
 }
 
 function toAiRuleSourcesDoc(plan: ProjectPlan): string {
   const ruleReferences = selectDevforgeRuleReferences(plan);
 
-  return [
+  return withManagedBanner([
     "# AI Rule Sources",
     "",
     "DevForge mapped this project to a curated set of stack-aligned rule pack recommendations.",
@@ -142,7 +148,7 @@ function toAiRuleSourcesDoc(plan: ProjectPlan): string {
     "- Copy or adapt the relevant `.cursorrules` content into your project-specific Cursor setup.",
     "- Keep `AGENTS.md`, `.cursor/rules/`, and `.claude/rules/` aligned with any customizations you make.",
     "",
-  ].join("\n");
+  ].join("\n"));
 }
 
 export function buildAiRuleFiles(plan: ProjectPlan): GeneratedFile[] {
