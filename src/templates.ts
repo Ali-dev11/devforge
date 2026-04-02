@@ -52,8 +52,38 @@ type FrontendSurfaceContext = {
   extraDetails?: ProjectDetailEntry[];
 };
 
+const unsafeJavaScriptLiteralCharMap: Record<string, string> = {
+  "&": "\\u0026",
+  "<": "\\u003C",
+  ">": "\\u003E",
+  "/": "\\u002F",
+  "\u2028": "\\u2028",
+  "\u2029": "\\u2029",
+};
+
+const htmlEntityMap: Record<string, string> = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  "\"": "&quot;",
+  "'": "&#39;",
+};
+
 function stringifyJson(data: unknown): string {
   return `${JSON.stringify(data, null, 2)}\n`;
+}
+
+function escapeUnsafeJavaScriptLiteralChars(value: string): string {
+  return value.replace(/[&<>/\u2028\u2029]/g, (char) => unsafeJavaScriptLiteralCharMap[char] ?? char);
+}
+
+function safeJavaScriptLiteral(data: unknown, indent?: number): string {
+  const serialized = JSON.stringify(data, null, indent);
+  return serialized === undefined ? "undefined" : escapeUnsafeJavaScriptLiteralChars(serialized);
+}
+
+function escapeHtmlText(value: string): string {
+  return value.replace(/[&<>"']/g, (char) => htmlEntityMap[char] ?? char);
 }
 
 function managedCommentPrefix(path: string): string | undefined {
@@ -1636,11 +1666,11 @@ function reactAppSource(plan: ProjectPlan, context?: FrontendSurfaceContext): Ge
     makeFile(
       "src/App.tsx",
       [
-        `const badge = ${JSON.stringify(surface.badge)};`,
-        `const heading = ${JSON.stringify(surface.heading)};`,
-        `const lead = ${JSON.stringify(surface.lead)};`,
-        `const details = ${JSON.stringify(surface.entries, null, 2)};`,
-        `const generatedWith = ${JSON.stringify(generatedWithText())};`,
+        `const badge = ${safeJavaScriptLiteral(surface.badge)};`,
+        `const heading = ${safeJavaScriptLiteral(surface.heading)};`,
+        `const lead = ${safeJavaScriptLiteral(surface.lead)};`,
+        `const details = ${safeJavaScriptLiteral(surface.entries, 2)};`,
+        `const generatedWith = ${safeJavaScriptLiteral(generatedWithText())};`,
         "",
         "export default function App() {",
         "  return (",
@@ -1734,8 +1764,8 @@ function nextJsSource(plan: ProjectPlan, context?: FrontendSurfaceContext): Gene
         "import type { ReactNode } from \"react\";",
         "",
         "export const metadata = {",
-        `  title: "${toTitleCase(plan.projectName)}",`,
-        `  description: "${plan.metadata.description}",`,
+        `  title: ${safeJavaScriptLiteral(toTitleCase(plan.projectName))},`,
+        `  description: ${safeJavaScriptLiteral(plan.metadata.description)},`,
         "};",
         "",
         "export default function RootLayout({ children }: { children: ReactNode }) {",
@@ -1751,8 +1781,8 @@ function nextJsSource(plan: ProjectPlan, context?: FrontendSurfaceContext): Gene
     makeFile(
       "app/page.tsx",
       [
-        `const details = ${JSON.stringify(surface.entries, null, 2)};`,
-        `const generatedWith = ${JSON.stringify(generatedWithText())};`,
+        `const details = ${safeJavaScriptLiteral(surface.entries, 2)};`,
+        `const generatedWith = ${safeJavaScriptLiteral(generatedWithText())};`,
         "",
         "export default function HomePage() {",
         "  return (",
@@ -1798,11 +1828,11 @@ function astroSource(plan: ProjectPlan, context?: FrontendSurfaceContext): Gener
       "src/pages/index.astro",
       [
         "---",
-        `const title = ${JSON.stringify(surface.heading)};`,
-        `const badge = ${JSON.stringify(surface.badge)};`,
-        `const lead = ${JSON.stringify(surface.lead)};`,
-        `const details = ${JSON.stringify(surface.entries, null, 2)};`,
-        `const generatedWith = ${JSON.stringify(generatedWithText())};`,
+        `const title = ${safeJavaScriptLiteral(surface.heading)};`,
+        `const badge = ${safeJavaScriptLiteral(surface.badge)};`,
+        `const lead = ${safeJavaScriptLiteral(surface.lead)};`,
+        `const details = ${safeJavaScriptLiteral(surface.entries, 2)};`,
+        `const generatedWith = ${safeJavaScriptLiteral(generatedWithText())};`,
         "---",
         "",
         "<html lang=\"en\">",
@@ -1917,7 +1947,7 @@ function vueSource(plan: ProjectPlan, context?: FrontendSurfaceContext): Generat
         "</template>",
         "",
         "<script setup lang=\"ts\">",
-        `const details = ${JSON.stringify(surface.entries, null, 2)};`,
+        `const details = ${safeJavaScriptLiteral(surface.entries, 2)};`,
         "</script>",
         "",
         "<style scoped>",
@@ -1971,7 +2001,7 @@ function nuxtSource(plan: ProjectPlan, context?: FrontendSurfaceContext): Genera
         "</template>",
         "",
         "<script setup lang=\"ts\">",
-        `const details = ${JSON.stringify(surface.entries, null, 2)};`,
+        `const details = ${safeJavaScriptLiteral(surface.entries, 2)};`,
         "</script>",
         "",
         "<style scoped>",
@@ -2046,7 +2076,7 @@ function svelteSource(plan: ProjectPlan, context?: FrontendSurfaceContext): Gene
       "src/App.svelte",
       [
         "<script lang=\"ts\">",
-        `  const details = ${JSON.stringify(surface.entries, null, 2)};`,
+        `  const details = ${safeJavaScriptLiteral(surface.entries, 2)};`,
         "</script>",
         "",
         `<svelte:head><title>${surface.heading}</title></svelte:head>`,
@@ -2090,7 +2120,7 @@ function svelteKitSource(plan: ProjectPlan, context?: FrontendSurfaceContext): G
       "src/routes/+page.svelte",
       [
         "<script lang=\"ts\">",
-        `  const details = ${JSON.stringify(surface.entries, null, 2)};`,
+        `  const details = ${safeJavaScriptLiteral(surface.entries, 2)};`,
         "</script>",
         "",
         `<svelte:head><title>${surface.heading}</title></svelte:head>`,
@@ -2168,8 +2198,8 @@ function solidSource(plan: ProjectPlan, context?: FrontendSurfaceContext): Gener
     makeFile(
       "src/App.tsx",
       [
-        `const details = ${JSON.stringify(surface.entries, null, 2)};`,
-        `const generatedWith = ${JSON.stringify(generatedWithText())};`,
+        `const details = ${safeJavaScriptLiteral(surface.entries, 2)};`,
+        `const generatedWith = ${safeJavaScriptLiteral(generatedWithText())};`,
         "",
         "export default function App() {",
         "  return (",
@@ -2207,7 +2237,7 @@ function angularSource(plan: ProjectPlan, context?: FrontendSurfaceContext): Gen
         "import { bootstrapApplication } from \"@angular/platform-browser\";",
         "import { Component } from \"@angular/core\";",
         "",
-        `const details = ${JSON.stringify(surface.entries, null, 2)};`,
+        `const details = ${safeJavaScriptLiteral(surface.entries, 2)};`,
         "",
         "@Component({",
         "  selector: \"app-root\",",
@@ -2260,9 +2290,9 @@ function remixSource(plan: ProjectPlan, context?: FrontendSurfaceContext): Gener
       [
         'import type { LinksFunction, MetaFunction } from "@remix-run/node";',
         "import { Links, Meta, Outlet, Scripts, ScrollRestoration } from \"@remix-run/react\";",
-        `import stylesheet from ${JSON.stringify(stylesheetPath)};`,
+        `import stylesheet from ${safeJavaScriptLiteral(stylesheetPath)};`,
         "",
-        `export const meta: MetaFunction = () => [{ title: ${JSON.stringify(toTitleCase(plan.projectName))} }];`,
+        `export const meta: MetaFunction = () => [{ title: ${safeJavaScriptLiteral(toTitleCase(plan.projectName))} }];`,
         "",
         "export const links: LinksFunction = () => [",
         "  { rel: \"stylesheet\", href: stylesheet },",
@@ -2371,8 +2401,8 @@ function remixSource(plan: ProjectPlan, context?: FrontendSurfaceContext): Gener
     makeFile(
       "app/routes/_index.tsx",
       [
-        `const details = ${JSON.stringify(surface.entries, null, 2)};`,
-        `const generatedWith = ${JSON.stringify(generatedWithText())};`,
+        `const details = ${safeJavaScriptLiteral(surface.entries, 2)};`,
+        `const generatedWith = ${safeJavaScriptLiteral(generatedWithText())};`,
         "",
         "export default function IndexRoute() {",
         "  return (",
@@ -2481,7 +2511,7 @@ function microfrontendHostFiles(
         "    federation({",
         '      name: "host",',
         "      remotes: {",
-        ...remotes.map((remote) => `        ${remote.moduleName}: ${JSON.stringify(remote.entryUrl)},`),
+        ...remotes.map((remote) => `        ${remote.moduleName}: ${safeJavaScriptLiteral(remote.entryUrl)},`),
         "      },",
         '      shared: ["react", "react-dom"],',
         "    }),",
@@ -2540,23 +2570,22 @@ function microfrontendHostFiles(
         'import { useState } from "react";',
         'import type { ComponentType } from "react";',
         "",
-        `const details = ${JSON.stringify(surface.entries, null, 2)};`,
-        `const generatedWith = ${JSON.stringify(generatedWithText())};`,
-        `const remotes = ${JSON.stringify(
+        `const details = ${safeJavaScriptLiteral(surface.entries, 2)};`,
+        `const generatedWith = ${safeJavaScriptLiteral(generatedWithText())};`,
+        `const remotes = ${safeJavaScriptLiteral(
           remotes.map((remote) => ({
             key: remote.key,
             title: remote.title,
             url: remote.url,
             moduleName: remote.moduleName,
           })),
-          null,
           2,
         )};`,
         "",
         'type RemoteStatus = "idle" | "loading" | "ready" | "error";',
         "",
         "const remoteLoaders = {",
-        ...remotes.map((remote) => `  ${JSON.stringify(remote.key)}: () => import("${remote.moduleName}/RemoteApp"),`),
+        ...remotes.map((remote) => `  ${safeJavaScriptLiteral(remote.key)}: () => import("${remote.moduleName}/RemoteApp"),`),
         "} satisfies Record<string, () => Promise<{ default: ComponentType }>>;",
         "",
         "export default function App() {",
@@ -2587,9 +2616,9 @@ function microfrontendHostFiles(
         '    <main style={{ minHeight: "100vh", padding: "3rem 1.5rem", background: "linear-gradient(180deg, #f8f5ef 0%, #efe9dd 100%)", color: "#112233" }}>',
         '      <section style={{ maxWidth: 1120, margin: "0 auto", display: "grid", gap: 24 }}>',
         '        <article style={{ padding: 32, borderRadius: 24, background: "rgba(255, 252, 247, 0.92)", border: "1px solid #e4d8c6", boxShadow: "0 24px 80px rgba(17, 34, 51, 0.08)" }}>',
-        '          <p style={{ letterSpacing: "0.18em", textTransform: "uppercase", fontSize: 12, fontWeight: 700, color: "#7d5a32" }}>{' + JSON.stringify(surface.badge) + "}</p>",
-        '          <h1 style={{ margin: "0.35rem 0 0", fontSize: "clamp(2.4rem, 5vw, 4rem)" }}>{' + JSON.stringify(surface.heading) + "}</h1>",
-        '          <p style={{ marginTop: 16, maxWidth: 760, fontSize: 18, lineHeight: 1.7, color: "#3a4856" }}>{' + JSON.stringify(surface.lead) + "}</p>",
+        '          <p style={{ letterSpacing: "0.18em", textTransform: "uppercase", fontSize: 12, fontWeight: 700, color: "#7d5a32" }}>{' + safeJavaScriptLiteral(surface.badge) + "}</p>",
+        '          <h1 style={{ margin: "0.35rem 0 0", fontSize: "clamp(2.4rem, 5vw, 4rem)" }}>{' + safeJavaScriptLiteral(surface.heading) + "}</h1>",
+        '          <p style={{ marginTop: 16, maxWidth: 760, fontSize: 18, lineHeight: 1.7, color: "#3a4856" }}>{' + safeJavaScriptLiteral(surface.lead) + "}</p>",
         '          <dl style={{ marginTop: 28, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16 }}>',
         "            {details.map((detail) => (",
         '              <div key={detail.label} style={{ margin: 0, padding: 18, borderRadius: 18, border: "1px solid #eadfcd", background: "#fffaf3" }}>',
@@ -2674,7 +2703,7 @@ function microfrontendRemoteFiles(
         "  plugins: [",
         "    react(),",
         "    federation({",
-        `      name: ${JSON.stringify(moduleName)},`,
+        `      name: ${safeJavaScriptLiteral(moduleName)},`,
         '      filename: "remoteEntry.js",',
         "      exposes: {",
         '        "./RemoteApp": "./src/RemoteApp.tsx",',
@@ -2738,17 +2767,17 @@ function microfrontendRemoteFiles(
       [
         'import RemoteApp from "./RemoteApp";',
         "",
-        `const details = ${JSON.stringify(surface.entries, null, 2)};`,
-        `const generatedWith = ${JSON.stringify(generatedWithText())};`,
+        `const details = ${safeJavaScriptLiteral(surface.entries, 2)};`,
+        `const generatedWith = ${safeJavaScriptLiteral(generatedWithText())};`,
         "",
         "export default function App() {",
         "  return (",
         '    <main style={{ minHeight: "100vh", padding: "3rem 1.5rem", background: "linear-gradient(180deg, #f8f5ef 0%, #efe9dd 100%)", color: "#112233" }}>',
         '      <section style={{ maxWidth: 960, margin: "0 auto", display: "grid", gap: 20 }}>',
         '        <article style={{ padding: 32, borderRadius: 24, background: "rgba(255, 252, 247, 0.92)", border: "1px solid #e4d8c6", boxShadow: "0 24px 80px rgba(17, 34, 51, 0.08)" }}>',
-        '          <p style={{ letterSpacing: "0.18em", textTransform: "uppercase", fontSize: 12, fontWeight: 700, color: "#7d5a32" }}>{' + JSON.stringify(surface.badge) + "}</p>",
-        '          <h1 style={{ margin: "0.35rem 0 0", fontSize: "clamp(2.2rem, 5vw, 3.6rem)" }}>{' + JSON.stringify(surface.heading) + "}</h1>",
-        '          <p style={{ marginTop: 16, maxWidth: 720, fontSize: 18, lineHeight: 1.7, color: "#3a4856" }}>{' + JSON.stringify(surface.lead) + "}</p>",
+        '          <p style={{ letterSpacing: "0.18em", textTransform: "uppercase", fontSize: 12, fontWeight: 700, color: "#7d5a32" }}>{' + safeJavaScriptLiteral(surface.badge) + "}</p>",
+        '          <h1 style={{ margin: "0.35rem 0 0", fontSize: "clamp(2.2rem, 5vw, 3.6rem)" }}>{' + safeJavaScriptLiteral(surface.heading) + "}</h1>",
+        '          <p style={{ marginTop: 16, maxWidth: 720, fontSize: 18, lineHeight: 1.7, color: "#3a4856" }}>{' + safeJavaScriptLiteral(surface.lead) + "}</p>",
         '          <dl style={{ marginTop: 28, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16 }}>',
         "            {details.map((detail) => (",
         '              <div key={detail.label} style={{ margin: 0, padding: 18, borderRadius: 18, border: "1px solid #eadfcd", background: "#fffaf3" }}>',
@@ -2777,7 +2806,7 @@ function microfrontendRemoteFiles(
 
 function backendServerSource(plan: ProjectPlan): string {
   const framework = plan.backend?.framework ?? "hono";
-  const projectInfo = JSON.stringify(
+  const projectInfo = safeJavaScriptLiteral(
     projectMetadataPayload(plan, {
       service: "api",
       endpoints: {
@@ -2785,7 +2814,6 @@ function backendServerSource(plan: ProjectPlan): string {
         health: "/health",
       },
     }),
-    null,
     2,
   );
 
@@ -2940,12 +2968,11 @@ function backendFiles(plan: ProjectPlan): GeneratedFile[] {
 }
 
 function cliToolFiles(plan: ProjectPlan): GeneratedFile[] {
-  const projectInfo = JSON.stringify(
+  const projectInfo = safeJavaScriptLiteral(
     projectMetadataPayload(plan, {
       service: "cli",
       commands: ["info", "--json", "--help"],
     }),
-    null,
     2,
   );
 
@@ -2959,9 +2986,9 @@ function cliToolFiles(plan: ProjectPlan): GeneratedFile[] {
         `const projectInfo = ${projectInfo};`,
         "",
         "function printSummary() {",
-        `  console.log(${JSON.stringify(toTitleCase(plan.projectName) + " CLI scaffold")});`,
-        `  console.log(${JSON.stringify(plan.metadata.description)});`,
-        `  console.log(${JSON.stringify(generatedWithText())});`,
+        `  console.log(${safeJavaScriptLiteral(toTitleCase(plan.projectName) + " CLI scaffold")});`,
+        `  console.log(${safeJavaScriptLiteral(plan.metadata.description)});`,
+        `  console.log(${safeJavaScriptLiteral(generatedWithText())});`,
         "  console.log(\"\");",
         "  console.log(`Intent: ${projectInfo.project.intent}`);",
         "  console.log(`Architecture: ${projectInfo.project.architecture}`);",
@@ -2970,7 +2997,7 @@ function cliToolFiles(plan: ProjectPlan): GeneratedFile[] {
         "}",
         "",
         "if (args.includes(\"--help\")) {",
-        `  console.log("Usage: ${plan.projectName} [command]\\n\\nCommands:\\n  info    Print the scaffold summary\\n\\nFlags:\\n  --json  Print full project metadata as JSON\\n  --help  Show this help message");`,
+        `  console.log(${safeJavaScriptLiteral(`Usage: ${plan.projectName} [command]\n\nCommands:\n  info    Print the scaffold summary\n\nFlags:\n  --json  Print full project metadata as JSON\n  --help  Show this help message`)});`,
         "} else if (args.includes(\"--json\") || args[0] === \"info\") {",
         "  console.log(JSON.stringify(projectInfo, null, 2));",
         "} else {",
@@ -3007,7 +3034,7 @@ function chromeExtensionFiles(plan: ProjectPlan): GeneratedFile[] {
         ]
       : undefined,
   };
-  const extensionInfo = JSON.stringify(
+  const extensionInfo = safeJavaScriptLiteral(
     projectMetadataPayload(plan, {
       service: "chrome-extension",
       extension: {
@@ -3016,7 +3043,6 @@ function chromeExtensionFiles(plan: ProjectPlan): GeneratedFile[] {
         includesPopup: plan.extension?.includesPopup ?? false,
       },
     }),
-    null,
     2,
   );
   const files: GeneratedFile[] = [
@@ -3106,8 +3132,8 @@ function chromeExtensionFiles(plan: ProjectPlan): GeneratedFile[] {
               "import ReactDOM from \"react-dom/client\";",
               "",
               `const extensionInfo = ${extensionInfo};`,
-              `const details = ${JSON.stringify(projectDetailsEntries(plan), null, 2)};`,
-              `const generatedWith = ${JSON.stringify(generatedWithText())};`,
+              `const details = ${safeJavaScriptLiteral(projectDetailsEntries(plan), 2)};`,
+              `const generatedWith = ${safeJavaScriptLiteral(generatedWithText())};`,
               "",
               "function Popup() {",
               "  return (",
@@ -3134,15 +3160,15 @@ function chromeExtensionFiles(plan: ProjectPlan): GeneratedFile[] {
             ].join("\n")
           : [
               `const extensionInfo = ${extensionInfo};`,
-              `const details = ${JSON.stringify(projectDetailsEntries(plan), null, 2)};`,
-              `const generatedWith = ${JSON.stringify(generatedWithText())};`,
+              `const details = ${safeJavaScriptLiteral(projectDetailsEntries(plan), 2)};`,
+              `const generatedWith = ${safeJavaScriptLiteral(generatedWithText())};`,
               "",
               "const root = document.getElementById(\"root\");",
               "if (root) {",
               "  const items = details",
               "    .map((detail) => `<div style=\"padding:12px;border-radius:14px;background:#fffaf3;border:1px solid #eadfcd\"><dt style=\"font-size:11px;text-transform:uppercase;letter-spacing:0.12em;color:#7b6547\">${detail.label}</dt><dd style=\"margin:0.45rem 0 0;font-size:16px;font-weight:600;color:#15283b\">${detail.value}</dd></div>`)",
               "    .join(\"\");",
-              `  root.innerHTML = \`<main style="min-width:360px;padding:18px;font-family:Georgia,serif;color:#112233;background:linear-gradient(180deg,#f8f5ef 0%,#efe9dd 100%)"><p style="text-transform:uppercase;letter-spacing:0.18em;font-size:11px;color:#7d5a32">Extension details</p><h1 style="margin:0.35rem 0 0">${toTitleCase(plan.projectName)}</h1><p style="line-height:1.6;color:#3a4856">${plan.metadata.description}</p><dl style="display:grid;gap:12px;margin-top:16px">\${items}</dl><pre style="margin-top:16px;padding:12px;border-radius:14px;background:#1b2430;color:#f8f5ef;font-size:11px;overflow:auto">\${JSON.stringify(extensionInfo, null, 2)}</pre><p style="margin-top:14px;font-size:12px;color:#6d5a45">\${generatedWith}</p></main>\`;`,
+              `  root.innerHTML = \`<main style="min-width:360px;padding:18px;font-family:Georgia,serif;color:#112233;background:linear-gradient(180deg,#f8f5ef 0%,#efe9dd 100%)"><p style="text-transform:uppercase;letter-spacing:0.18em;font-size:11px;color:#7d5a32">Extension details</p><h1 style="margin:0.35rem 0 0">${escapeHtmlText(toTitleCase(plan.projectName))}</h1><p style="line-height:1.6;color:#3a4856">${escapeHtmlText(plan.metadata.description)}</p><dl style="display:grid;gap:12px;margin-top:16px">\${items}</dl><pre style="margin-top:16px;padding:12px;border-radius:14px;background:#1b2430;color:#f8f5ef;font-size:11px;overflow:auto">\${JSON.stringify(extensionInfo, null, 2)}</pre><p style="margin-top:14px;font-size:12px;color:#6d5a45">\${generatedWith}</p></main>\`;`,
               "}",
               "",
             ].join("\n"),
@@ -3631,13 +3657,13 @@ function testingFiles(plan: ProjectPlan): GeneratedFile[] {
           "export default defineConfig({",
           "  testDir: \"tests\",",
           "  webServer: {",
-          `    command: ${JSON.stringify(packageManagerRunCommand(plan.packageManager, "dev"))},`,
-          `    url: ${JSON.stringify(baseUrl)},`,
+          `    command: ${safeJavaScriptLiteral(packageManagerRunCommand(plan.packageManager, "dev"))},`,
+          `    url: ${safeJavaScriptLiteral(baseUrl)},`,
           "    reuseExistingServer: !process.env.CI,",
           "    timeout: 120_000,",
           "  },",
           "  use: {",
-          `    baseURL: ${JSON.stringify(baseUrl)},`,
+          `    baseURL: ${safeJavaScriptLiteral(baseUrl)},`,
           "  },",
           "});",
           "",
@@ -3668,7 +3694,7 @@ function testingFiles(plan: ProjectPlan): GeneratedFile[] {
           "",
           "export default defineConfig({",
           "  e2e: {",
-          `    baseUrl: ${JSON.stringify(baseUrl)},`,
+          `    baseUrl: ${safeJavaScriptLiteral(baseUrl)},`,
           "  },",
           "});",
           "",
@@ -3763,14 +3789,13 @@ function fullstackExtras(plan: ProjectPlan): GeneratedFile[] {
   }
 
   if (plan.frontend?.framework === "nextjs") {
-    const projectInfo = JSON.stringify(
+    const projectInfo = safeJavaScriptLiteral(
       projectMetadataPayload(plan, {
         service: "fullstack-api",
         endpoints: {
           health: "/api/health",
         },
       }),
-      null,
       2,
     );
 

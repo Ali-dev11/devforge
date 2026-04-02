@@ -74,7 +74,7 @@ test("generator returns a runnable default frontend scaffold", () => {
   assert.match(readmeFile.content, /devforge init --config \.\/devforge\.config\.json --output \.\/my-app/);
   assert.match(readmeFile.content, /devforge add testing/);
   assert.match(appFile.content, /Project details/);
-  assert.match(appFile.content, /Created by Ali-dev11 via @ali-dev11\/devforge/);
+  assert.match(appFile.content, /Created by Ali-dev11 via @ali-dev11(?:\/|\\u002F)devforge/);
   assert.match(
     files.find((file) => file.path === "vite.config.ts")?.content ?? "",
     /@tailwindcss\/vite/,
@@ -183,7 +183,7 @@ test("microfrontend scaffolds skip generic workspace apps and include packageMan
   );
   assert.match(
     files.find((file) => file.path === "apps/host/vite.config.ts")?.content ?? "",
-    /http:\/\/127\.0\.0\.1:4174\/assets\/remoteEntry\.js/,
+    /http:(?:\/\/|\\u002F\\u002F)127\.0\.0\.1:4174(?:\/|\\u002F)assets(?:\/|\\u002F)remoteEntry\.js/,
   );
   assert.match(
     files.find((file) => file.path === "apps/host/src/App.tsx")?.content ?? "",
@@ -231,8 +231,72 @@ test("backend, cli, and extension scaffolds expose project metadata surfaces", (
   assert.ok(popupFile);
   assert.ok(backgroundFile);
   assert.match(popupFile.content, /Extension details/);
-  assert.match(popupFile.content, /Created by Ali-dev11 via @ali-dev11\/devforge/);
+  assert.match(popupFile.content, /Created by Ali-dev11 via @ali-dev11(?:\/|\\u002F)devforge/);
   assert.match(backgroundFile.content, /extensionInfo/);
+});
+
+test("generator sanitizes user text before embedding it into generated source code", () => {
+  const unsafeProjectName = "unsafe </script> name";
+  const unsafeDescription = "description </script><img src=x onerror=alert(1)>";
+
+  const nextPlan = buildDefaultPlan(environment, {
+    ...cliOptions,
+    projectName: unsafeProjectName,
+  });
+  nextPlan.projectName = unsafeProjectName;
+  nextPlan.metadata.description = unsafeDescription;
+  nextPlan.frontend = {
+    framework: "nextjs",
+    rendering: "ssr",
+    styling: "vanilla-css",
+    uiLibrary: "none",
+    state: "none",
+    dataFetching: "native-fetch",
+  };
+
+  const nextFiles = buildProjectFiles(nextPlan, environment);
+  const nextLayoutFile = nextFiles.find((file) => file.path === "app/layout.tsx");
+  assert.ok(nextLayoutFile);
+  assert.match(nextLayoutFile.content, /\\u003C/);
+  assert.doesNotMatch(nextLayoutFile.content, /<\/script>/);
+  assert.doesNotMatch(nextLayoutFile.content, /<img src=x onerror=alert\(1\)>/);
+
+  const remixPlan = buildDefaultPlan(environment, {
+    ...cliOptions,
+    projectName: unsafeProjectName,
+  });
+  remixPlan.projectName = unsafeProjectName;
+  remixPlan.metadata.description = unsafeDescription;
+  remixPlan.frontend = {
+    framework: "remix",
+    rendering: "ssr",
+    styling: "vanilla-css",
+    uiLibrary: "none",
+    state: "none",
+    dataFetching: "native-fetch",
+  };
+
+  const remixFiles = buildProjectFiles(remixPlan, environment);
+  const remixRootFile = remixFiles.find((file) => file.path === "app/root.tsx");
+  assert.ok(remixRootFile);
+  assert.match(remixRootFile.content, /\\u003C/);
+  assert.doesNotMatch(remixRootFile.content, /<\/script>/);
+
+  const cliPlan = buildDefaultPlan(environment, {
+    ...cliOptions,
+    projectName: unsafeProjectName,
+  });
+  cliPlan.intent = "cli-tool";
+  cliPlan.projectName = unsafeProjectName;
+  cliPlan.metadata.description = unsafeDescription;
+  applyIntentDefaults(cliPlan);
+
+  const cliFiles = buildProjectFiles(cliPlan, environment);
+  const cliEntryFile = cliFiles.find((file) => file.path === "src/index.ts");
+  assert.ok(cliEntryFile);
+  assert.match(cliEntryFile.content, /\\u003C/);
+  assert.doesNotMatch(cliEntryFile.content, /<\/script>/);
+  assert.doesNotMatch(cliEntryFile.content, /<img src=x onerror=alert\(1\)>/);
 });
 
 test("nextjs scaffolds include next type support and css-safe typecheck setup", () => {
@@ -321,7 +385,7 @@ test("remix bun scaffolds include runtime guidance, CLI dependencies, and typed-
   assert.match(eslintConfigFile.content, /projectService: true/);
   assert.match(eslintConfigFile.content, /\*\*\/\*\.\{js,mjs,cjs\}/);
   assert.match(playwrightConfigFile.content, /command: "bun run dev"/);
-  assert.match(playwrightConfigFile.content, /baseURL: "http:\/\/localhost:3000"/);
+  assert.match(playwrightConfigFile.content, /baseURL: "http:(?:\/\/|\\u002F\\u002F)localhost:3000"/);
   assert.match(readmeFile.content, /First Run Requirements/);
   assert.match(readmeFile.content, /Install Bun on each machine/);
   assert.match(readmeFile.content, /Recommended Setup/);
