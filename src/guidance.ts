@@ -3,6 +3,7 @@ import type {
   ArchitectureMode,
   BackendFramework,
   BackendLanguage,
+  DeploymentTarget,
   EnvironmentInfo,
   FrontendFramework,
   FrontendRenderingMode,
@@ -19,6 +20,7 @@ import type {
 } from "./types.js";
 import { REACT_FAMILY_FRAMEWORKS, VUE_FAMILY_FRAMEWORKS } from "./constants.js";
 import {
+  canUsePackageManager,
   hasFrontendLikeSurface,
   hasSystemTool,
   platformScopedDockerInstallCommand,
@@ -80,6 +82,20 @@ const SUPPORTED_RENDERING_MODES: Record<FrontendFramework, FrontendRenderingMode
   svelte: ["client", "static"],
   solidjs: ["client", "static"],
 };
+
+export function deploymentTargetLabel(target: DeploymentTarget): string {
+  switch (target) {
+    case "vercel":
+      return "Vercel";
+    case "netlify":
+      return "Netlify";
+    case "docker-compose":
+      return "Docker Compose";
+    case "none":
+    default:
+      return "None";
+  }
+}
 
 export function packageManagerInstallCommand(packageManager: PackageManager): string {
   switch (packageManager) {
@@ -318,6 +334,39 @@ export function getSupportedBackendLanguages(
   return ["typescript", "javascript"];
 }
 
+export function getSupportedDeploymentTargets(
+  plan: ProjectPlan,
+): DeploymentTarget[] {
+  const targets: DeploymentTarget[] = ["none"];
+
+  if (
+    plan.intent === "frontend-app" &&
+    plan.architecture === "simple" &&
+    plan.frontend?.framework === "react-vite"
+  ) {
+    targets.push("vercel", "netlify");
+  }
+
+  if (
+    plan.intent === "frontend-app" &&
+    plan.architecture === "simple" &&
+    plan.frontend?.framework === "nextjs"
+  ) {
+    targets.push("vercel");
+  }
+
+  if (
+    plan.intent === "backend-api" &&
+    plan.architecture !== "monorepo" &&
+    plan.backend &&
+    ["express", "fastify", "hono"].includes(plan.backend.framework)
+  ) {
+    targets.push("docker-compose");
+  }
+
+  return targets;
+}
+
 export function getSupportedTestRunners(plan: ProjectPlan): TestRunner[] {
   if (plan.intent === "chrome-extension") {
     return ["vitest", "jest"];
@@ -496,6 +545,12 @@ export function getStackNotes(plan: ProjectPlan): string[] {
     notes.push(`Open ${defaultUrl} after starting the dev server to inspect the generated starter surface.`);
   }
 
+  if (plan.deployment.target !== "none") {
+    notes.push(
+      `The scaffold includes a ${deploymentTargetLabel(plan.deployment.target)} deployment baseline. Review the generated deployment files before using them in production.`,
+    );
+  }
+
   return notes;
 }
 
@@ -520,6 +575,28 @@ export function buildTemplateGuidance(plan: ProjectPlan): PostCreateGuidance {
     recommended.push({
       title: "Install Docker before using container workflows",
       detail: "The scaffold includes Docker assets, but Docker Desktop or Docker Engine must be installed separately on each machine that will build or run the container image.",
+    });
+  }
+
+  if (plan.deployment.target === "docker-compose") {
+    recommended.push({
+      title: "Validate the Docker Compose baseline before shipping",
+      detail: "Run the generated compose stack locally first so you can confirm ports, environment variables, and image startup behavior before wiring a real server.",
+      command: "docker compose up --build",
+    });
+  }
+
+  if (plan.deployment.target === "vercel") {
+    recommended.push({
+      title: "Configure Vercel project secrets before using the deployment workflow",
+      detail: "Set `VERCEL_TOKEN`, `VERCEL_ORG_ID`, and `VERCEL_PROJECT_ID` in your GitHub repository or deployment environment before running the generated Vercel workflow.",
+    });
+  }
+
+  if (plan.deployment.target === "netlify") {
+    recommended.push({
+      title: "Configure Netlify credentials before using the deployment workflow",
+      detail: "Set `NETLIFY_AUTH_TOKEN` and `NETLIFY_SITE_ID` before triggering the generated Netlify deploy workflow.",
     });
   }
 
@@ -576,7 +653,9 @@ export function buildRuntimeGuidance(
     }
   }
 
-  if (!environment.packageManagers[plan.packageManager].installed) {
+  const packageManagerReady = canUsePackageManager(environment, plan.packageManager);
+
+  if (!packageManagerReady) {
     requiredBeforeRun.unshift({
       title: `Install or enable ${plan.packageManager}`,
       detail: `${plan.packageManager} was selected for this project, but it is not currently available in your shell. Install or enable it before using the generated ${plan.packageManager} commands.`,
@@ -627,7 +706,7 @@ export function buildRuntimeGuidance(
     });
   }
 
-  const nextCommands = installResult.dependencyInstall.succeeded
+  const nextCommands = installResult.dependencyInstall.succeeded && currentNodeSupported && packageManagerReady
     ? [
         plan.targetDir !== cwd ? `cd ${plan.targetDir}` : undefined,
         ...templateGuidance.nextCommands.filter(

@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -69,6 +69,8 @@ try {
     [
       resolve(installDir, "node_modules/@ali-dev11/devforge/dist/bin/devforge.js"),
       "init",
+      "--preset",
+      "frontend-app",
       "--yes",
       "--save-config",
       "--skip-install",
@@ -76,6 +78,31 @@ try {
       outputDir,
     ],
     rootDir,
+  );
+
+  run(
+    "node",
+    [
+      resolve(installDir, "node_modules/@ali-dev11/devforge/dist/bin/devforge.js"),
+      "upgrade",
+      "--skip-install",
+    ],
+    outputDir,
+  );
+
+  const storedPlanPath = resolve(outputDir, ".devforge/project-plan.json");
+  const storedPlan = JSON.parse(readFileSync(storedPlanPath, "utf8"));
+  storedPlan.deployment.target = "vercel";
+  writeFileSync(storedPlanPath, `${JSON.stringify(storedPlan, null, 2)}\n`, "utf8");
+
+  run(
+    "node",
+    [
+      resolve(installDir, "node_modules/@ali-dev11/devforge/dist/bin/devforge.js"),
+      "upgrade",
+      "--skip-install",
+    ],
+    outputDir,
   );
 
   run(
@@ -94,6 +121,10 @@ try {
 
   if (!existsSync(resolve(outputDir, "Dockerfile"))) {
     throw new Error("Packed smoke run did not create Dockerfile after `devforge add docker`.");
+  }
+
+  if (!existsSync(resolve(outputDir, "vercel.json"))) {
+    throw new Error("Packed smoke run did not create vercel.json after `devforge upgrade`.");
   }
 } finally {
   rmSync(workspace, { recursive: true, force: true });

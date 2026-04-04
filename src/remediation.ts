@@ -28,6 +28,17 @@ export function hasSystemTool(
   return environment.systemTools?.[tool]?.installed ?? false;
 }
 
+export function canUsePackageManager(
+  environment: EnvironmentInfo,
+  packageManager: PackageManager,
+): boolean {
+  if (environment.packageManagers[packageManager].installed) {
+    return true;
+  }
+
+  return (packageManager === "pnpm" || packageManager === "yarn") && hasSystemTool(environment, "corepack");
+}
+
 export function platformScopedNodeSetupCommand(
   environment: EnvironmentInfo,
   targetNodeVersion: string | undefined,

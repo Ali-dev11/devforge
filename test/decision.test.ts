@@ -12,7 +12,9 @@ import {
   getArchitectureChoicesForIntent,
 } from "../src/engines/prompts.js";
 import {
+  deploymentTargetLabel,
   getSupportedBackendLanguages,
+  getSupportedDeploymentTargets,
   getSupportedDataFetchingChoicesForState,
   getSupportedFrontendFrameworks,
   getSupportedPackageManagers,
@@ -314,6 +316,61 @@ test("bun is only offered for verified stack paths", () => {
     "svelte",
     "solidjs",
   ]);
+});
+
+test("deployment targets are only offered for verified stack pairs and normalize unsupported selections", () => {
+  const frontendPlan = buildDefaultPlan(environment, cliOptions);
+  frontendPlan.frontend = {
+    framework: "react-vite",
+    rendering: "client",
+    styling: "tailwind-css",
+    uiLibrary: "shadcn-ui",
+    state: "zustand",
+    dataFetching: "tanstack-query",
+  };
+
+  assert.deepEqual(getSupportedDeploymentTargets(frontendPlan), [
+    "none",
+    "vercel",
+    "netlify",
+  ]);
+
+  const unsupportedPlan = buildDefaultPlan(environment, cliOptions);
+  unsupportedPlan.frontend = {
+    framework: "astro",
+    rendering: "static",
+    styling: "tailwind-css",
+    uiLibrary: "none",
+    state: "none",
+    dataFetching: "native-fetch",
+  };
+  unsupportedPlan.deployment.target = "vercel";
+
+  const unsupportedResult = normalizeProjectPlan(unsupportedPlan, environment);
+  assert.equal(unsupportedResult.plan.deployment.target, "none");
+  assert.match(
+    unsupportedResult.warnings.join(" "),
+    new RegExp(deploymentTargetLabel("vercel"), "i"),
+  );
+
+  const backendPlan = buildDefaultPlan(environment, cliOptions);
+  backendPlan.intent = "backend-api";
+  applyIntentDefaults(backendPlan);
+  backendPlan.backend = {
+    framework: "hono",
+    language: "typescript",
+    auth: [],
+    orm: "none",
+    database: "none",
+    redis: false,
+    swagger: true,
+    websockets: false,
+  };
+  backendPlan.deployment.target = "docker-compose";
+
+  const backendResult = normalizeProjectPlan(backendPlan, environment);
+  assert.equal(backendResult.plan.deployment.target, "docker-compose");
+  assert.equal(backendResult.plan.tooling.docker, true);
 });
 
 test("remix rendering stays on supported modes", () => {

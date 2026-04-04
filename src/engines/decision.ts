@@ -14,6 +14,8 @@ import type {
 } from "../types.js";
 import {
   chooseSupportedPackageManager,
+  deploymentTargetLabel,
+  getSupportedDeploymentTargets,
   getSupportedBackendLanguages,
   getDefaultRenderingMode,
   getSupportedDataFetchingChoices,
@@ -59,6 +61,10 @@ export function normalizeProjectPlan(
 ): NormalizedPlanResult {
   const plan: ProjectPlan = JSON.parse(JSON.stringify(inputPlan)) as ProjectPlan;
   const warnings: string[] = [];
+
+  plan.deployment ??= {
+    target: "none",
+  };
 
   if (plan.intent === "microfrontend-system") {
     plan.architecture = "microfrontend";
@@ -256,6 +262,18 @@ export function normalizeProjectPlan(
       );
       plan.frontend.dataFetching = "native-fetch";
     }
+  }
+
+  const supportedDeploymentTargets = getSupportedDeploymentTargets(plan);
+  if (!supportedDeploymentTargets.includes(plan.deployment.target)) {
+    warnings.push(
+      `${deploymentTargetLabel(plan.deployment.target)} deployment is not scaffolded for the selected stack; switching deployment target to none.`,
+    );
+    plan.deployment.target = "none";
+  }
+
+  if (plan.deployment.target === "docker-compose") {
+    plan.tooling.docker = true;
   }
 
   if (plan.frontend?.dataFetching === "rtk-query") {

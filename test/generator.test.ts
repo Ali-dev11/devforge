@@ -74,7 +74,7 @@ test("generator returns a runnable default frontend scaffold", () => {
   assert.match(readmeFile.content, /devforge init --config \.\/devforge\.config\.json --output \.\/my-app/);
   assert.match(readmeFile.content, /devforge add testing/);
   assert.match(appFile.content, /Project details/);
-  assert.match(appFile.content, /Created by Ali-dev11 via @ali-dev11\/devforge/);
+  assert.match(appFile.content, /Created by Ali-dev11 via @ali-dev11(?:\/|\\u002F)devforge/);
   assert.match(
     files.find((file) => file.path === "vite.config.ts")?.content ?? "",
     /@tailwindcss\/vite/,
@@ -183,7 +183,7 @@ test("microfrontend scaffolds skip generic workspace apps and include packageMan
   );
   assert.match(
     files.find((file) => file.path === "apps/host/vite.config.ts")?.content ?? "",
-    /http:\/\/127\.0\.0\.1:4174\/assets\/remoteEntry\.js/,
+    /http:(?:\/\/|\\u002F\\u002F)127\.0\.0\.1:4174(?:\/|\\u002F)assets(?:\/|\\u002F)remoteEntry\.js/,
   );
   assert.match(
     files.find((file) => file.path === "apps/host/src/App.tsx")?.content ?? "",
@@ -231,8 +231,72 @@ test("backend, cli, and extension scaffolds expose project metadata surfaces", (
   assert.ok(popupFile);
   assert.ok(backgroundFile);
   assert.match(popupFile.content, /Extension details/);
-  assert.match(popupFile.content, /Created by Ali-dev11 via @ali-dev11\/devforge/);
+  assert.match(popupFile.content, /Created by Ali-dev11 via @ali-dev11(?:\/|\\u002F)devforge/);
   assert.match(backgroundFile.content, /extensionInfo/);
+});
+
+test("generator sanitizes user text before embedding it into generated source code", () => {
+  const unsafeProjectName = "unsafe </script> name";
+  const unsafeDescription = "description </script><img src=x onerror=alert(1)>";
+
+  const nextPlan = buildDefaultPlan(environment, {
+    ...cliOptions,
+    projectName: unsafeProjectName,
+  });
+  nextPlan.projectName = unsafeProjectName;
+  nextPlan.metadata.description = unsafeDescription;
+  nextPlan.frontend = {
+    framework: "nextjs",
+    rendering: "ssr",
+    styling: "vanilla-css",
+    uiLibrary: "none",
+    state: "none",
+    dataFetching: "native-fetch",
+  };
+
+  const nextFiles = buildProjectFiles(nextPlan, environment);
+  const nextLayoutFile = nextFiles.find((file) => file.path === "app/layout.tsx");
+  assert.ok(nextLayoutFile);
+  assert.match(nextLayoutFile.content, /\\u003C/);
+  assert.doesNotMatch(nextLayoutFile.content, /<\/script>/);
+  assert.doesNotMatch(nextLayoutFile.content, /<img src=x onerror=alert\(1\)>/);
+
+  const remixPlan = buildDefaultPlan(environment, {
+    ...cliOptions,
+    projectName: unsafeProjectName,
+  });
+  remixPlan.projectName = unsafeProjectName;
+  remixPlan.metadata.description = unsafeDescription;
+  remixPlan.frontend = {
+    framework: "remix",
+    rendering: "ssr",
+    styling: "vanilla-css",
+    uiLibrary: "none",
+    state: "none",
+    dataFetching: "native-fetch",
+  };
+
+  const remixFiles = buildProjectFiles(remixPlan, environment);
+  const remixRootFile = remixFiles.find((file) => file.path === "app/root.tsx");
+  assert.ok(remixRootFile);
+  assert.match(remixRootFile.content, /\\u003C/);
+  assert.doesNotMatch(remixRootFile.content, /<\/script>/);
+
+  const cliPlan = buildDefaultPlan(environment, {
+    ...cliOptions,
+    projectName: unsafeProjectName,
+  });
+  cliPlan.intent = "cli-tool";
+  cliPlan.projectName = unsafeProjectName;
+  cliPlan.metadata.description = unsafeDescription;
+  applyIntentDefaults(cliPlan);
+
+  const cliFiles = buildProjectFiles(cliPlan, environment);
+  const cliEntryFile = cliFiles.find((file) => file.path === "src/index.ts");
+  assert.ok(cliEntryFile);
+  assert.match(cliEntryFile.content, /\\u003C/);
+  assert.doesNotMatch(cliEntryFile.content, /<\/script>/);
+  assert.doesNotMatch(cliEntryFile.content, /<img src=x onerror=alert\(1\)>/);
 });
 
 test("nextjs scaffolds include next type support and css-safe typecheck setup", () => {
@@ -321,7 +385,7 @@ test("remix bun scaffolds include runtime guidance, CLI dependencies, and typed-
   assert.match(eslintConfigFile.content, /projectService: true/);
   assert.match(eslintConfigFile.content, /\*\*\/\*\.\{js,mjs,cjs\}/);
   assert.match(playwrightConfigFile.content, /command: "bun run dev"/);
-  assert.match(playwrightConfigFile.content, /baseURL: "http:\/\/localhost:3000"/);
+  assert.match(playwrightConfigFile.content, /baseURL: "http:(?:\/\/|\\u002F\\u002F)localhost:3000"/);
   assert.match(readmeFile.content, /First Run Requirements/);
   assert.match(readmeFile.content, /Install Bun on each machine/);
   assert.match(readmeFile.content, /Recommended Setup/);
@@ -386,6 +450,74 @@ test("jest scaffolds emit runnable cjs config for TypeScript projects", () => {
   assert.match(jestConfigFile.content, /module\.exports = config/);
   assert.match(jestConfigFile.content, /ts-jest/);
   assert.match(jestConfigFile.content, /extensionsToTreatAsEsm/);
+});
+
+test("supported deployment targets generate target-specific files and docs", () => {
+  const reactPlan = buildDefaultPlan(environment, cliOptions);
+  reactPlan.intent = "frontend-app";
+  reactPlan.frontend = {
+    framework: "react-vite",
+    rendering: "client",
+    styling: "tailwind-css",
+    uiLibrary: "shadcn-ui",
+    state: "zustand",
+    dataFetching: "tanstack-query",
+  };
+  reactPlan.deployment.target = "netlify";
+
+  const reactFiles = buildProjectFiles(reactPlan, environment);
+  const netlifyFile = reactFiles.find((file) => file.path === "netlify.toml");
+  const reactReadme = reactFiles.find((file) => file.path === "README.md");
+
+  assert.ok(netlifyFile);
+  assert.ok(reactReadme);
+  assert.match(netlifyFile.content, /publish = "dist"/);
+  assert.match(reactReadme.content, /Deployment target: Netlify/);
+
+  const nextPlan = buildDefaultPlan(environment, cliOptions);
+  nextPlan.intent = "frontend-app";
+  nextPlan.frontend = {
+    framework: "nextjs",
+    rendering: "ssr",
+    styling: "vanilla-css",
+    uiLibrary: "none",
+    state: "none",
+    dataFetching: "native-fetch",
+  };
+  nextPlan.deployment.target = "vercel";
+
+  const nextFiles = buildProjectFiles(nextPlan, environment);
+  const vercelFile = nextFiles.find((file) => file.path === "vercel.json");
+  const deployWorkflow = nextFiles.find((file) => file.path === ".github/workflows/deploy.yml");
+
+  assert.ok(vercelFile);
+  assert.ok(deployWorkflow);
+  assert.match(deployWorkflow.content, /vercel deploy --prebuilt --prod/);
+
+  const backendPlan = buildDefaultPlan(environment, cliOptions);
+  backendPlan.intent = "backend-api";
+  applyIntentDefaults(backendPlan);
+  backendPlan.backend = {
+    framework: "fastify",
+    language: "typescript",
+    auth: [],
+    orm: "none",
+    database: "none",
+    redis: false,
+    swagger: true,
+    websockets: false,
+  };
+  backendPlan.deployment.target = "docker-compose";
+  backendPlan.tooling.docker = true;
+
+  const backendFiles = buildProjectFiles(backendPlan, environment);
+  const composeFile = backendFiles.find((file) => file.path === "docker-compose.yml");
+  const dockerfile = backendFiles.find((file) => file.path === "Dockerfile");
+
+  assert.ok(composeFile);
+  assert.ok(dockerfile);
+  assert.match(composeFile.content, /3001:3001/);
+  assert.match(dockerfile.content, /CMD \["pnpm","run","start"\]/);
 });
 
 test("nestjs and javascript backend scaffolds include compatible build settings", () => {

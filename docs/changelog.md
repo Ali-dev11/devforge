@@ -9,6 +9,33 @@ Track what changed in DevForge CLI across releases, including scaffolding behavi
 - [GitHub Releases](https://github.com/Ali-dev11/devforge/releases)
 - [Repository Changelog](https://github.com/Ali-dev11/devforge/blob/main/CHANGELOG.md)
 
+## [0.5.0] - 2026-04-02
+
+### Added
+
+- Added `devforge init --preset <name-or-path>` with built-in presets for `frontend-app`, `backend-api`, `fullstack-app`, and `chrome-extension`, plus support for local preset JSON files.
+- Added `devforge upgrade` to refresh DevForge-managed docs, workflows, AI rules, deployment files, and core tooling surfaces from `.devforge/project-plan.json`.
+- Added deployment-target support for verified scaffold pairs:
+  `react-vite` frontend apps can target `Vercel` or `Netlify`,
+  `nextjs` frontend apps can target `Vercel`,
+  and `express`, `fastify`, and `hono` backend APIs can target `Docker Compose`.
+- Added target-specific deployment generation including `vercel.json`, `netlify.toml`, `docker-compose.yml`, and manual deploy workflow examples when GitHub Actions are enabled.
+- Added regression coverage for presets, upgrade behavior, deployment-target normalization, deployment artifact generation, and runtime-matrix deployment scenarios.
+
+### Changed
+
+- Extended the packed npm smoke path so it now validates preset-driven init, upgrade, deployment-target refresh, and managed feature addition from the packed tarball.
+- Updated generated project docs to explain presets, `devforge upgrade`, deployment targets, and the managed-surface lifecycle.
+- Added managed markers to generated docs, workflows, AI rule files, and other comment-friendly managed surfaces so plan-driven upgrades can safely refresh those files later.
+- Updated generated deployment-oriented Dockerfiles to use production-style `start` commands for Docker Compose baselines instead of defaulting to dev-mode entrypoints.
+
+### Fixed
+
+- Fixed upgrade behavior for plan changes by allowing managed-marker files such as README and generated docs to refresh even when the stored project plan changes between runs.
+- Fixed the generated deployment matrix so verified deployment targets are actually exercised by repository CI instead of existing only in unit-level checks.
+- Fixed generator-side source sanitization for user-controlled strings embedded into generated TypeScript and JavaScript files, including Remix metadata exports and CLI/runtime metadata payloads.
+- Fixed runtime-matrix loopback HTTP verification so it no longer relies on fetch-based downloads for local readiness checks, which removes the insecure-download CodeQL finding without weakening scenario coverage.
+
 ## [0.4.5] - 2026-04-01
 
 ### Added

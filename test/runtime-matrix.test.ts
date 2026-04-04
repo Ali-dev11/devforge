@@ -32,3 +32,15 @@ test("runtime matrix includes the Bun and Remix verification path", () => {
   assert.equal(remixScenario.intent, "frontend-app");
   assert.equal(remixScenario.frontendFramework, "remix");
 });
+
+test("runtime matrix includes deployment-target verification paths", () => {
+  assert.ok(
+    runtimeScenarios.find((scenario) => scenario.name === "frontend-nextjs"),
+  );
+  assert.ok(
+    runtimeScenarios.find((scenario) => scenario.name === "frontend-react-vite-netlify"),
+  );
+  assert.ok(
+    runtimeScenarios.find((scenario) => scenario.name === "backend-fastify"),
+  );
+});
