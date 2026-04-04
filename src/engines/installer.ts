@@ -16,11 +16,14 @@ type CommandResult = {
   output?: string;
 };
 
+const QUICK_COMMAND_TIMEOUT_MS = 3_000;
+
 function runCommand(
   command: string,
   args: string[],
   cwd: string,
   env?: Record<string, string>,
+  options?: { timeoutMs?: number },
 ): CommandResult {
   const result = spawnSync(command, args, {
     cwd,
@@ -30,7 +33,16 @@ function runCommand(
       ...env,
     },
     stdio: ["ignore", "pipe", "pipe"],
+    timeout: options?.timeoutMs,
+    killSignal: "SIGTERM",
   });
+
+  if (result.error) {
+    return {
+      ok: false,
+      output: result.error.message,
+    };
+  }
 
   const output = `${result.stdout ?? ""}${result.stderr ?? ""}`.trim() || undefined;
   return {
@@ -54,7 +66,9 @@ function installArgs(packageManager: ProjectPlan["packageManager"]): string[] {
 }
 
 function hasCorepack(cwd: string): boolean {
-  return runCommand("corepack", ["--version"], cwd).ok;
+  return runCommand("corepack", ["--version"], cwd, undefined, {
+    timeoutMs: QUICK_COMMAND_TIMEOUT_MS,
+  }).ok;
 }
 
 function installCacheEnv(

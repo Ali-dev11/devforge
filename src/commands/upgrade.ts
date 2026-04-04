@@ -250,12 +250,14 @@ function existingDependenciesAppearInstalled(cwd: string): boolean {
 function noDependencyInstallResult(
   plan: ProjectPlan,
   cwd: string,
-  reason: string,
 ): InstallResult {
   const dependenciesInstalled = existingDependenciesAppearInstalled(cwd);
+  const missingDependenciesMessage =
+    "Project dependencies do not appear to be installed. Run the package manager install command before using the refreshed scaffold.";
+
   return {
     executed: [],
-    skipped: [reason],
+    skipped: dependenciesInstalled ? [] : [missingDependenciesMessage],
     dependencyInstall: {
       attempted: false,
       succeeded: dependenciesInstalled,
@@ -263,8 +265,8 @@ function noDependencyInstallResult(
       available: true,
       command: `${plan.packageManager} install`,
       failureReason: dependenciesInstalled
-        ? reason
-        : "Project dependencies do not appear to be installed. Run the package manager install command before using the refreshed scaffold.",
+        ? undefined
+        : missingDependenciesMessage,
     },
   };
 }
@@ -276,7 +278,14 @@ async function readStoredPlan(cwd: string): Promise<ProjectPlan> {
   }
 
   try {
-    return await readJson<ProjectPlan>(projectPlanPath);
+    const plan = await readJson<ProjectPlan>(projectPlanPath);
+    if (plan.schemaVersion !== 1) {
+      throw new Error(
+        `Unsupported DevForge project metadata version in ${projectPlanPath}: ${String(plan.schemaVersion)}.`,
+      );
+    }
+
+    return plan;
   } catch (error) {
     if (error instanceof SyntaxError) {
       throw new Error(".devforge/project-plan.json is not valid JSON.");
@@ -364,11 +373,7 @@ export async function applyUpgrade(
       onStep: options.onStep,
     });
   } else {
-    installResult = noDependencyInstallResult(
-      plan,
-      cwd,
-      "Upgrade refreshed managed files without changing package manifests.",
-    );
+    installResult = noDependencyInstallResult(plan, cwd);
   }
 
   return {

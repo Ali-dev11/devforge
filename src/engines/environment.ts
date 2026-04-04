@@ -2,11 +2,27 @@ import os from "node:os";
 import { spawnSync } from "node:child_process";
 import type { BinaryStatus, EnvironmentInfo, PackageManager } from "../types.js";
 
-function readCommandOutput(command: string, args: string[]): string | undefined {
+const FAST_COMMAND_TIMEOUT_MS = 3_000;
+
+type ReadCommandOptions = {
+  timeoutMs?: number;
+};
+
+export function readCommandOutput(
+  command: string,
+  args: string[],
+  options: ReadCommandOptions = {},
+): string | undefined {
   const result = spawnSync(command, args, {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
+    timeout: options.timeoutMs ?? FAST_COMMAND_TIMEOUT_MS,
+    killSignal: "SIGTERM",
   });
+
+  if (result.error) {
+    return undefined;
+  }
 
   if (result.status !== 0) {
     return undefined;

@@ -83,3 +83,46 @@ test("upgrade skips managed files that users have modified away from the generat
   assert.match(result.skippedManaged.join(" "), /README\.md/);
   assert.equal(readme, "# Custom README\n");
 });
+
+test("upgrade rejects unsupported DevForge project metadata versions", async () => {
+  const targetDir = await mkdtemp(join(tmpdir(), "devforge-upgrade-schema-version-"));
+  const plan = buildDefaultPlan(environment, {
+    ...cliOptions,
+    outputDir: targetDir,
+    projectName: "devforge-upgrade-schema-version",
+  });
+  plan.targetDir = targetDir;
+
+  await generateProject(plan, environment);
+
+  const storedPlanPath = join(targetDir, PROJECT_PLAN_PATH);
+  const storedPlan = JSON.parse(await readFile(storedPlanPath, "utf8")) as ProjectPlan;
+  storedPlan.schemaVersion = 2;
+  await writeFile(storedPlanPath, `${JSON.stringify(storedPlan, null, 2)}\n`, "utf8");
+
+  await assert.rejects(
+    () => applyUpgrade(targetDir, environment, { skipInstall: true }),
+    /Unsupported DevForge project metadata version/i,
+  );
+});
+
+test("upgrade reports missing dependencies instead of a generic no-op warning", async () => {
+  const targetDir = await mkdtemp(join(tmpdir(), "devforge-upgrade-missing-deps-"));
+  const plan = buildDefaultPlan(environment, {
+    ...cliOptions,
+    outputDir: targetDir,
+    projectName: "devforge-upgrade-missing-deps",
+  });
+  plan.targetDir = targetDir;
+
+  await generateProject(plan, environment);
+
+  const result = await applyUpgrade(targetDir, environment, { skipInstall: true });
+  const skippedText = result.installResult.skipped.join(" ");
+
+  assert.doesNotMatch(
+    skippedText,
+    /refreshed managed files without changing package manifests/i,
+  );
+  assert.match(skippedText, /do not appear to be installed/i);
+});
