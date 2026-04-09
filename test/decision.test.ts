@@ -333,6 +333,7 @@ test("deployment targets are only offered for verified stack pairs and normalize
     "none",
     "vercel",
     "netlify",
+    "render",
   ]);
 
   const unsupportedPlan = buildDefaultPlan(environment, cliOptions);
@@ -371,6 +372,29 @@ test("deployment targets are only offered for verified stack pairs and normalize
   const backendResult = normalizeProjectPlan(backendPlan, environment);
   assert.equal(backendResult.plan.deployment.target, "docker-compose");
   assert.equal(backendResult.plan.tooling.docker, true);
+  assert.deepEqual(getSupportedDeploymentTargets(backendPlan), [
+    "none",
+    "docker-compose",
+    "render",
+    "railway",
+  ]);
+
+  const nextPlan = buildDefaultPlan(environment, cliOptions);
+  nextPlan.frontend = {
+    framework: "nextjs",
+    rendering: "ssr",
+    styling: "vanilla-css",
+    uiLibrary: "none",
+    state: "none",
+    dataFetching: "native-fetch",
+  };
+
+  assert.deepEqual(getSupportedDeploymentTargets(nextPlan), [
+    "none",
+    "vercel",
+    "render",
+    "railway",
+  ]);
 });
 
 test("remix rendering stays on supported modes", () => {

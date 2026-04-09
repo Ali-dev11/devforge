@@ -761,15 +761,15 @@ export async function collectProjectPlan(
           )
         : {};
     const backendSetupAnswers = await prompts(
-      [
-        {
-          type: "toggle",
-          name: "customizeBackend",
-          message: "Configure backend capabilities?",
-          initial: false,
-          active: "yes",
-          inactive: "no",
-        },
+        [
+          {
+            type: "toggle",
+            name: "customizeBackend",
+            message: "Configure backend capability baselines?",
+            initial: false,
+            active: "yes",
+            inactive: "no",
+          },
       ],
       { onCancel: cancelHandler },
     );
@@ -806,13 +806,13 @@ export async function collectProjectPlan(
           {
             type: "multiselect",
             name: "auth",
-            message: "Authentication",
+            message: "Authentication baselines",
             choices: withSelected(AUTH_CHOICES, plan.backend?.auth ?? []),
           },
           {
             type: "select",
             name: "database",
-            message: "Database",
+            message: "Database baseline",
             choices: getDatabaseChoicesForBackend(plan.backend),
             initial: getInitialChoiceIndex(
               getDatabaseChoicesForBackend(plan.backend),
@@ -832,7 +832,7 @@ export async function collectProjectPlan(
           {
             type: "select",
             name: "orm",
-            message: "ORM / query layer",
+            message: "ORM / query layer baseline",
             choices: getOrmChoicesForBackend(compatibleBackend),
             initial: getInitialChoiceIndex(
               getOrmChoicesForBackend(compatibleBackend),
@@ -842,7 +842,7 @@ export async function collectProjectPlan(
           {
             type: "toggle",
             name: "redis",
-            message: "Add Redis?",
+            message: "Add Redis baseline?",
             initial: plan.backend?.redis ?? false,
             active: "yes",
             inactive: "no",
@@ -850,7 +850,7 @@ export async function collectProjectPlan(
           {
             type: "toggle",
             name: "swagger",
-            message: "Add Swagger docs?",
+            message: "Add Swagger baseline?",
             initial: plan.backend?.swagger ?? true,
             active: "yes",
             inactive: "no",
@@ -858,7 +858,7 @@ export async function collectProjectPlan(
           {
             type: "toggle",
             name: "websockets",
-            message: "Add WebSockets?",
+            message: "Add WebSockets baseline?",
             initial: plan.backend?.websockets ?? false,
             active: "yes",
             inactive: "no",

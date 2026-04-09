@@ -16,7 +16,7 @@ import type {
   InstallResult,
   ProjectPlan,
 } from "../types.js";
-import { pathExists, readJson, writeJson, writeTextFile } from "../utils/fs.js";
+import { pathExists, readJson, removeFile, writeJson, writeTextFile } from "../utils/fs.js";
 import { banner, info, step, success, warn } from "../utils/logger.js";
 
 export type ApplyUpgradeOptions = {
@@ -40,6 +40,14 @@ type PackageJsonShape = {
   devDependencies?: Record<string, string>;
   engines?: Record<string, string>;
 };
+
+const TARGET_EXCLUSIVE_MANAGED_PATHS = [
+  "vercel.json",
+  "netlify.toml",
+  "render.yaml",
+  "railway.toml",
+  "docker-compose.yml",
+] as const;
 
 function printAdvisorySection(
   title: string,
@@ -115,6 +123,36 @@ function buildGeneratedFileMap(
   return new Map(files.map((file) => [file.path, file]));
 }
 
+function buildTargetExclusiveManagedContentCandidates(
+  plan: ProjectPlan,
+  environment: EnvironmentInfo,
+  path: (typeof TARGET_EXCLUSIVE_MANAGED_PATHS)[number],
+): Set<string> {
+  const candidates = new Set<string>();
+  const targets: ProjectPlan["deployment"]["target"][] = [
+    "vercel",
+    "netlify",
+    "render",
+    "railway",
+    "docker-compose",
+  ];
+
+  for (const target of targets) {
+    const variant: ProjectPlan = JSON.parse(JSON.stringify(plan)) as ProjectPlan;
+    variant.deployment.target = target;
+    if (target === "docker-compose") {
+      variant.tooling.docker = true;
+    }
+
+    const content = buildGeneratedFileMap(variant, environment).get(path)?.content;
+    if (content) {
+      candidates.add(content);
+    }
+  }
+
+  return candidates;
+}
+
 function shouldManagePathForUpgrade(path: string): boolean {
   return (
     path === "README.md" ||
@@ -139,6 +177,8 @@ function shouldManagePathForUpgrade(path: string): boolean {
     path === "docker-compose.yml" ||
     path === "vercel.json" ||
     path === "netlify.toml" ||
+    path === "render.yaml" ||
+    path === "railway.toml" ||
     path === "AGENTS.md" ||
     path === "docs/architecture.md" ||
     path === "docs/getting-started.md" ||
@@ -349,6 +389,50 @@ export async function applyUpgrade(
     }
 
     skippedManaged.push(relativePath);
+  }
+
+  for (const [relativePath, previousFile] of previousGenerated.entries()) {
+    if (!shouldManagePathForUpgrade(relativePath) || nextGenerated.has(relativePath)) {
+      continue;
+    }
+
+    const absolutePath = join(cwd, relativePath);
+    const currentContent = await readTextFileIfExists(absolutePath);
+
+    if (currentContent === undefined) {
+      continue;
+    }
+
+    if (currentContent === previousFile.content || hasManagedMarker(currentContent)) {
+      await removeFile(absolutePath);
+      filesWritten.push(absolutePath);
+      continue;
+    }
+
+    skippedManaged.push(relativePath);
+  }
+
+  for (const relativePath of TARGET_EXCLUSIVE_MANAGED_PATHS) {
+    if (nextGenerated.has(relativePath)) {
+      continue;
+    }
+
+    const absolutePath = join(cwd, relativePath);
+    const currentContent = await readTextFileIfExists(absolutePath);
+    if (currentContent === undefined) {
+      continue;
+    }
+
+    const generatedCandidates = buildTargetExclusiveManagedContentCandidates(
+      plan,
+      environment,
+      relativePath,
+    );
+
+    if (generatedCandidates.has(currentContent)) {
+      await removeFile(absolutePath);
+      filesWritten.push(absolutePath);
+    }
   }
 
   const projectPlanPath = join(cwd, PROJECT_PLAN_PATH);

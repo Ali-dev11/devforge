@@ -34,6 +34,7 @@ npx --yes @ali-dev11/devforge@latest add testing
 - Config-driven runs pass through the same normalization and compatibility checks as interactive runs, so invalid hand-written combinations are still corrected or rejected with guidance.
 - `devforge upgrade` refreshes DevForge-managed docs, workflows, AI rules, deployment files, and core tooling surfaces while skipping files that no longer match the previous generated baseline.
 - `devforge add <feature>` updates an existing DevForge project by reading `.devforge/project-plan.json` and rewriting only the managed files for that feature.
+- Verified deployment targets now carry a normalized provider profile, so generated docs and workflows stay aligned on build commands, start commands, health checks, secrets, and expected environment variables.
 
 ## Repository Commands
 
@@ -72,9 +73,11 @@ npm run runtime:matrix -- --scenario backend-hono --scenario cli-tool
 - Use `npx --yes @ali-dev11/devforge@latest init --save-config` when you want an interactive run to become a reusable team preset later.
 - Use `npx --yes @ali-dev11/devforge@latest init --config ./devforge.config.json --output ./my-app` when validating reproducible scaffold output.
 - Use `npx --yes @ali-dev11/devforge@latest upgrade` when changing generated docs, workflows, deployment baselines, or other managed tooling surfaces.
+- When changing deployment targets, verify both the generated provider file and the follow-up workflow guidance because `upgrade` now removes stale managed provider files that still match a previous generated baseline.
 - Use `npx --yes @ali-dev11/devforge@latest add testing`, `add docker`, `add github-actions`, or `add ai-rules` when validating managed post-scaffold updates.
 - Use `npm run runtime:matrix` when changing templates, prompts, package-manager behavior, or generated runtime surfaces.
 - Use `npm run smoke:packed` when changing the package entrypoints, published files, CLI dispatch, or install-time behavior.
+- If you touch deployment generation, validate `Render` and `Railway` flows through `npm run runtime:matrix` or `npm run smoke:packed`, not just unit-level file snapshots.
 - If you touch microfrontend templates, validate the generated `dev` workflow, not just build output.
 - If you touch docs or release notes, rerun `npm run docs:changelog`.
 

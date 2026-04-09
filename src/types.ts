@@ -81,7 +81,13 @@ export type RuleCategory =
 export type StrictnessLevel = "low" | "moderate" | "strict";
 export type TestRunner = "none" | "vitest" | "jest" | "playwright" | "cypress";
 export type TestEnvironment = "none" | "node" | "jsdom" | "happy-dom" | "browser-e2e";
-export type DeploymentTarget = "none" | "vercel" | "netlify" | "docker-compose";
+export type DeploymentTarget =
+  | "none"
+  | "vercel"
+  | "netlify"
+  | "docker-compose"
+  | "render"
+  | "railway";
 export type LicenseChoice =
   | "MIT"
   | "Apache-2.0"
@@ -207,6 +213,30 @@ export interface MetadataConfig {
 
 export interface DeploymentConfig {
   target: DeploymentTarget;
+  healthPath?: string;
+  port?: number;
+}
+
+export interface DeploymentVariable {
+  name: string;
+  description: string;
+  example?: string;
+  secret?: boolean;
+}
+
+export interface DeploymentProfile {
+  target: Exclude<DeploymentTarget, "none">;
+  label: string;
+  category: "static-site" | "managed-node" | "container";
+  port?: number;
+  healthPath?: string;
+  installCommand?: string;
+  buildCommand?: string;
+  startCommand?: string;
+  outputDirectory?: string;
+  generatedFiles: string[];
+  secrets: DeploymentVariable[];
+  environmentVariables: DeploymentVariable[];
 }
 
 export interface ProjectPlan {

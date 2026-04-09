@@ -202,6 +202,8 @@ export const DEPLOYMENT_TARGET_CHOICES: Array<{
   { title: "None", value: "none" },
   { title: "Vercel", value: "vercel" },
   { title: "Netlify", value: "netlify" },
+  { title: "Render", value: "render" },
+  { title: "Railway", value: "railway" },
   { title: "Docker Compose", value: "docker-compose" },
 ];
 

@@ -38,9 +38,21 @@ test("runtime matrix includes deployment-target verification paths", () => {
     runtimeScenarios.find((scenario) => scenario.name === "frontend-nextjs"),
   );
   assert.ok(
+    runtimeScenarios.find((scenario) => scenario.name === "frontend-nextjs-railway"),
+  );
+  assert.ok(
     runtimeScenarios.find((scenario) => scenario.name === "frontend-react-vite-netlify"),
   );
   assert.ok(
     runtimeScenarios.find((scenario) => scenario.name === "backend-fastify"),
+  );
+  assert.ok(
+    runtimeScenarios.find((scenario) => scenario.name === "backend-fastify-render"),
+  );
+  assert.ok(
+    runtimeScenarios.find((scenario) => scenario.name === "backend-nestjs-enterprise-pnpm"),
+  );
+  assert.ok(
+    runtimeScenarios.find((scenario) => scenario.name === "chrome-extension-react-jest-pnpm"),
   );
 });

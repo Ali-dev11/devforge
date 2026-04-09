@@ -170,15 +170,22 @@ function parseArgs(argv: string[]): ParsedArgs {
   return parsed;
 }
 
-function installCommandForPackageManager(packageManager: ProjectPlan["packageManager"]): {
+function installCommandForPackageManager(
+  environment: EnvironmentInfo,
+  packageManager: ProjectPlan["packageManager"],
+): {
   command: string;
   args: string[];
 } {
   switch (packageManager) {
     case "pnpm":
-      return { command: "pnpm", args: ["install"] };
+      return environment.packageManagers.pnpm.installed
+        ? { command: "pnpm", args: ["install"] }
+        : { command: "corepack", args: ["pnpm", "install"] };
     case "yarn":
-      return { command: "yarn", args: ["install"] };
+      return environment.packageManagers.yarn.installed
+        ? { command: "yarn", args: ["install"] }
+        : { command: "corepack", args: ["yarn", "install"] };
     case "bun":
       return { command: "bun", args: ["install"] };
     case "npm":
@@ -616,6 +623,25 @@ async function verifyApiRuntime(
   }
 }
 
+async function runScenarioScript(
+  context: ScenarioExecutionContext,
+  command: {
+    cwd?: string;
+    script: string;
+    extraArgs?: string[];
+    env?: Record<string, string | undefined>;
+  },
+): Promise<void> {
+  const cwd = command.cwd ? join(context.targetDir, command.cwd) : context.targetDir;
+  const invocation = packageManagerScriptInvocation(
+    context.plan.packageManager,
+    command.script,
+    command.extraArgs,
+  );
+
+  await runCommand(invocation.command, invocation.args, cwd, command.env);
+}
+
 async function verifyCliJson(context: ScenarioExecutionContext): Promise<void> {
   const output = await new Promise<string>((resolve, reject) => {
     const child = spawn("node", ["dist/src/index.js", "--json"], {
@@ -723,6 +749,36 @@ export const runtimeScenarios: RuntimeScenario[] = [
         {
           script: "start",
           extraArgs: ["--hostname", "127.0.0.1", "--port", String(context.port)],
+        },
+      );
+    },
+  },
+  {
+    name: "frontend-nextjs-railway",
+    description: "Frontend app runtime on Next.js with Railway baseline",
+    intent: "frontend-app",
+    frontendFramework: "nextjs",
+    mode: "http",
+    configure(plan) {
+      plan.frontend = {
+        framework: "nextjs",
+        rendering: "ssr",
+        styling: "vanilla-css",
+        uiLibrary: "none",
+        state: "none",
+        dataFetching: "native-fetch",
+      };
+      plan.deployment.target = "railway";
+      plan.tooling.githubActions = true;
+    },
+    async runVerification(context) {
+      await readFile(join(context.targetDir, "railway.toml"), "utf8");
+      await readFile(join(context.targetDir, ".github", "workflows", "deploy.yml"), "utf8");
+      return verifyPreviewRuntime(
+        context,
+        {
+          script: "start",
+          extraArgs: ["--port", String(context.port)],
         },
       );
     },
@@ -981,6 +1037,35 @@ export const runtimeScenarios: RuntimeScenario[] = [
     },
   },
   {
+    name: "backend-fastify-render",
+    description: "Backend API runtime on Fastify with Render baseline",
+    intent: "backend-api",
+    backendFramework: "fastify",
+    mode: "http",
+    configure(plan) {
+      plan.backend = {
+        framework: "fastify",
+        language: "typescript",
+        auth: [],
+        orm: "none",
+        database: "none",
+        redis: false,
+        swagger: false,
+        websockets: false,
+      };
+      plan.deployment.target = "render";
+      plan.tooling.githubActions = true;
+    },
+    async runVerification(context) {
+      await readFile(join(context.targetDir, "render.yaml"), "utf8");
+      await readFile(join(context.targetDir, ".github", "workflows", "deploy.yml"), "utf8");
+      return verifyApiRuntime(context, {
+        script: "start",
+        path: "/health",
+      });
+    },
+  },
+  {
     name: "backend-hono",
     description: "Backend API runtime on Hono",
     intent: "backend-api",
@@ -1040,7 +1125,7 @@ export const runtimeScenarios: RuntimeScenario[] = [
       plan.backend = {
         framework: "nestjs",
         language: "typescript",
-        adapter: "express",
+        adapter: "fastify",
         auth: [],
         orm: "none",
         database: "none",
@@ -1048,9 +1133,56 @@ export const runtimeScenarios: RuntimeScenario[] = [
         swagger: false,
         websockets: false,
       };
+      plan.testing = {
+        enabled: true,
+        runner: "jest",
+        environment: "node",
+        includeExampleTests: true,
+      };
     },
     runVerification(context) {
       return verifyApiRuntime(context, {
+        script: "start",
+        path: "/health",
+      });
+    },
+  },
+  {
+    name: "backend-nestjs-enterprise-pnpm",
+    description: "Backend API runtime on NestJS Fastify with pnpm and enterprise capabilities",
+    intent: "backend-api",
+    backendFramework: "nestjs",
+    mode: "http",
+    configure(plan) {
+      plan.packageManager = "pnpm";
+      plan.templateTier = "enterprise";
+      plan.tooling.docker = true;
+      plan.tooling.githubActions = true;
+      plan.testing = {
+        enabled: true,
+        runner: "jest",
+        environment: "node",
+        includeExampleTests: true,
+      };
+      plan.backend = {
+        framework: "nestjs",
+        language: "typescript",
+        adapter: "fastify",
+        auth: ["jwt", "oauth"],
+        orm: "drizzle",
+        database: "postgresql",
+        redis: true,
+        swagger: true,
+        websockets: true,
+      };
+    },
+    async runVerification(context) {
+      await readFile(join(context.targetDir, "src", "db", "schema.ts"), "utf8");
+      await readFile(join(context.targetDir, "jest.config.cjs"), "utf8");
+      await readFile(join(context.targetDir, "Dockerfile"), "utf8");
+      await readFile(join(context.targetDir, ".github", "workflows", "ci.yml"), "utf8");
+      await runScenarioScript(context, { script: "test" });
+      await verifyApiRuntime(context, {
         script: "start",
         path: "/health",
       });
@@ -1172,6 +1304,34 @@ export const runtimeScenarios: RuntimeScenario[] = [
     },
   },
   {
+    name: "chrome-extension-react-jest-pnpm",
+    description: "Chrome extension artifact verification on React with pnpm and Jest",
+    intent: "chrome-extension",
+    extensionFlavor: "react",
+    mode: "artifacts",
+    configure(plan) {
+      plan.packageManager = "pnpm";
+      plan.extension = {
+        flavor: "react",
+        includesBackground: true,
+        includesContent: true,
+        includesPopup: true,
+        manifestVersion: "v3",
+      };
+      plan.testing = {
+        enabled: true,
+        runner: "jest",
+        environment: "jsdom",
+        includeExampleTests: true,
+      };
+    },
+    async runVerification(context) {
+      await readFile(join(context.targetDir, "jest.config.cjs"), "utf8");
+      await runScenarioScript(context, { script: "test" });
+      await verifyExtensionArtifacts(context);
+    },
+  },
+  {
     name: "chrome-extension-vanilla-ts",
     description: "Chrome extension artifact verification on vanilla TypeScript",
     intent: "chrome-extension",
@@ -1272,7 +1432,7 @@ async function runScenario(
 
   try {
     console.log(`[${scenario.name}] installing dependencies`);
-    const installInvocation = installCommandForPackageManager(plan.packageManager);
+    const installInvocation = installCommandForPackageManager(environment, plan.packageManager);
     await runCommand(installInvocation.command, installInvocation.args, targetDir);
 
     console.log(`[${scenario.name}] building scaffold`);
