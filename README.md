@@ -22,7 +22,7 @@ DevForge helps you:
 - AI rule outputs for Cursor, Claude, Codex, and `AGENTS.md`
 - testing setup for Vitest, Jest, Playwright, and Cypress
 - optional ESLint, Prettier, Husky, Commitlint, Docker, and GitHub Actions setup
-- deployment baselines for verified Vercel, Netlify, and Docker Compose scaffold pairs
+- deployment baselines for verified Vercel, Netlify, Render, Railway, and Docker Compose scaffold pairs
 - generated docs, changelog-ready project metadata, and baseline repository hygiene
 
 ## Quick Start
@@ -170,10 +170,10 @@ npm run runtime:matrix -- --scenario backend-hono --scenario cli-tool
 ## Deployment Targets
 
 - Verified deployment targets are offered only for supported stack pairs.
-- `react-vite` frontend apps can target `Vercel` or `Netlify`.
-- `nextjs` frontend apps can target `Vercel`.
-- `express`, `fastify`, and `hono` backend APIs can target `Docker Compose`.
-- Deployment generation includes target-specific config files and optional manual deploy workflows when GitHub Actions is enabled.
+- `react-vite` frontend apps can target `Vercel`, `Netlify`, or `Render`.
+- `nextjs` frontend apps can target `Vercel`, `Render`, or `Railway`.
+- `express`, `fastify`, and `hono` backend APIs can target `Docker Compose`, `Render`, or `Railway`.
+- Deployment generation includes provider-specific config files, build/start/health-path guidance, expected env vars, and optional manual deploy workflows when GitHub Actions are enabled.
 
 ## Repository Docs
 

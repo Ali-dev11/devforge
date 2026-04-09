@@ -35,15 +35,15 @@ jobs:
       matrix:
         group:
           - name: frontend-core
-            args: --scenario landing-react-vite --scenario frontend-nextjs --scenario frontend-react-vite-netlify --scenario frontend-astro --scenario frontend-remix-bun
+            args: --scenario landing-react-vite --scenario frontend-nextjs --scenario frontend-nextjs-railway --scenario frontend-react-vite-netlify --scenario frontend-astro --scenario frontend-remix-bun
           - name: frontend-apps
             args: --scenario frontend-vue-vite --scenario frontend-nuxt --scenario frontend-svelte --scenario frontend-solidjs
           - name: backends
-            args: --scenario backend-express --scenario backend-fastify --scenario backend-hono --scenario backend-koa-javascript --scenario backend-nestjs
+            args: --scenario backend-express --scenario backend-fastify --scenario backend-fastify-render --scenario backend-hono --scenario backend-koa-javascript --scenario backend-nestjs --scenario backend-nestjs-enterprise-pnpm
           - name: fullstack-workspaces
             args: --scenario fullstack-nextjs --scenario fullstack-react-api --scenario microfrontend-workspace
           - name: extensions-cli
-            args: --scenario chrome-extension-react --scenario chrome-extension-vanilla-ts --scenario cli-tool
+            args: --scenario chrome-extension-react --scenario chrome-extension-react-jest-pnpm --scenario chrome-extension-vanilla-ts --scenario cli-tool
     steps:
       - uses: actions/checkout@v6
       - uses: oven-sh/setup-bun@v2

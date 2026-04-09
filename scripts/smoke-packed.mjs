@@ -92,7 +92,7 @@ try {
 
   const storedPlanPath = resolve(outputDir, ".devforge/project-plan.json");
   const storedPlan = JSON.parse(readFileSync(storedPlanPath, "utf8"));
-  storedPlan.deployment.target = "vercel";
+  storedPlan.deployment.target = "render";
   writeFileSync(storedPlanPath, `${JSON.stringify(storedPlan, null, 2)}\n`, "utf8");
 
   run(
@@ -123,8 +123,8 @@ try {
     throw new Error("Packed smoke run did not create Dockerfile after `devforge add docker`.");
   }
 
-  if (!existsSync(resolve(outputDir, "vercel.json"))) {
-    throw new Error("Packed smoke run did not create vercel.json after `devforge upgrade`.");
+  if (!existsSync(resolve(outputDir, "render.yaml"))) {
+    throw new Error("Packed smoke run did not create render.yaml after `devforge upgrade`.");
   }
 } finally {
   rmSync(workspace, { recursive: true, force: true });

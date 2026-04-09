@@ -11,6 +11,7 @@ import type {
 import {
   buildTemplateGuidance,
   deploymentTargetLabel,
+  getDeploymentProfile,
   getDefaultLocalUrl,
   packageManagerCiInstallCommand,
   packageManagerInstallCommand,
@@ -530,6 +531,7 @@ function licenseText(license: ProjectPlan["metadata"]["license"]): string {
 }
 
 function architectureDoc(plan: ProjectPlan): string {
+  const deploymentProfile = getDeploymentProfile(plan);
   const stack = [
     plan.frontend?.framework && `Frontend: ${toTitleCase(plan.frontend.framework)}`,
     plan.backend?.framework && `Backend: ${toTitleCase(plan.backend.framework)}`,
@@ -547,6 +549,20 @@ function architectureDoc(plan: ProjectPlan): string {
     `- Package manager: ${plan.packageManager}`,
     `- Node strategy: ${plan.nodeStrategy}${plan.customNodeVersion ? ` (${plan.customNodeVersion})` : ""}`,
     `- Deployment target: ${deploymentTargetLabel(plan.deployment.target)}`,
+    ...(deploymentProfile
+      ? [
+          `- Deployment category: ${toTitleCase(deploymentProfile.category)}`,
+          deploymentProfile.buildCommand
+            ? `- Deployment build command: ${deploymentProfile.buildCommand}`
+            : undefined,
+          deploymentProfile.startCommand
+            ? `- Deployment start command: ${deploymentProfile.startCommand}`
+            : undefined,
+          deploymentProfile.healthPath
+            ? `- Deployment health path: ${deploymentProfile.healthPath}`
+            : undefined,
+        ].filter(Boolean)
+      : []),
     stack.length > 0 ? `- Stack: ${joinSentence(stack)}` : "- Stack: metadata-first blueprint",
     plan.frontend?.state !== undefined ? `- Frontend state: ${toTitleCase(plan.frontend.state)}` : undefined,
     plan.frontend?.dataFetching !== undefined
@@ -573,6 +589,7 @@ function architectureDoc(plan: ProjectPlan): string {
 
 function readme(plan: ProjectPlan): string {
   const guidance = buildTemplateGuidance(plan);
+  const deploymentProfile = getDeploymentProfile(plan);
   const installCommand = packageManagerInstallCommand(plan.packageManager);
   const runtimeCommands = guidance.nextCommands.filter((command) => command !== installCommand);
   const structure =
@@ -621,6 +638,40 @@ function readme(plan: ProjectPlan): string {
       `- ${item.title}: ${item.detail}`,
       ...(item.command ? [`  Command: \`${item.command}\``] : []),
     ]),
+    ...(deploymentProfile
+      ? [
+          "",
+          "## Deployment Baseline",
+          `- Provider: ${deploymentProfile.label}`,
+          `- Category: ${toTitleCase(deploymentProfile.category)}`,
+          ...(deploymentProfile.buildCommand
+            ? [`- Build command: \`${deploymentProfile.buildCommand}\``]
+            : []),
+          ...(deploymentProfile.startCommand
+            ? [`- Start command: \`${deploymentProfile.startCommand}\``]
+            : []),
+          ...(deploymentProfile.outputDirectory
+            ? [`- Output directory: \`${deploymentProfile.outputDirectory}\``]
+            : []),
+          ...(deploymentProfile.healthPath
+            ? [`- Health path: \`${deploymentProfile.healthPath}\``]
+            : []),
+          ...(deploymentProfile.environmentVariables.length > 0
+            ? [
+                `- Environment variables: ${joinSentence(
+                  deploymentProfile.environmentVariables.map((variable) => `\`${variable.name}\``),
+                )}`,
+              ]
+            : []),
+          ...(deploymentProfile.secrets.length > 0
+            ? [
+                `- Workflow secrets: ${joinSentence(
+                  deploymentProfile.secrets.map((variable) => `\`${variable.name}\``),
+                )}`,
+              ]
+            : []),
+        ]
+      : []),
     "",
     "## Common Commands",
     "```bash",
@@ -663,6 +714,8 @@ function readme(plan: ProjectPlan): string {
     "- `AGENTS.md` and optional tool-specific directories contain AI rules.",
     ...(plan.deployment.target === "vercel" ? ["- `vercel.json` captures the generated Vercel deployment baseline."] : []),
     ...(plan.deployment.target === "netlify" ? ["- `netlify.toml` captures the generated Netlify deployment baseline."] : []),
+    ...(plan.deployment.target === "render" ? ["- `render.yaml` captures the generated Render Blueprint baseline."] : []),
+    ...(plan.deployment.target === "railway" ? ["- `railway.toml` captures the generated Railway config-as-code baseline."] : []),
     ...(plan.deployment.target === "docker-compose"
       ? ["- `docker-compose.yml` defines the generated local or self-hosted Docker Compose deployment baseline."]
       : []),
@@ -691,6 +744,7 @@ function readme(plan: ProjectPlan): string {
 
 function gettingStartedDoc(plan: ProjectPlan): string {
   const guidance = buildTemplateGuidance(plan);
+  const deploymentProfile = getDeploymentProfile(plan);
   const installCommand = packageManagerInstallCommand(plan.packageManager);
   const runtimeCommands = guidance.nextCommands.filter((command) => command !== installCommand);
 
@@ -717,6 +771,36 @@ function gettingStartedDoc(plan: ProjectPlan): string {
       `- ${item.title}: ${item.detail}`,
       ...(item.command ? [`  Command: \`${item.command}\``] : []),
     ]),
+    ...(deploymentProfile
+      ? [
+          "",
+          "## Deployment Checklist",
+          `- Provider: ${deploymentProfile.label}`,
+          ...(deploymentProfile.buildCommand
+            ? [`- Build command: \`${deploymentProfile.buildCommand}\``]
+            : []),
+          ...(deploymentProfile.startCommand
+            ? [`- Start command: \`${deploymentProfile.startCommand}\``]
+            : []),
+          ...(deploymentProfile.healthPath
+            ? [`- Health path: \`${deploymentProfile.healthPath}\``]
+            : []),
+          ...(deploymentProfile.environmentVariables.length > 0
+            ? [
+                `- Configure these environment variables before the first deploy: ${joinSentence(
+                  deploymentProfile.environmentVariables.map((variable) => `\`${variable.name}\``),
+                )}`,
+              ]
+            : []),
+          ...(deploymentProfile.secrets.length > 0
+            ? [
+                `- Configure these provider or CI secrets before the first deploy: ${joinSentence(
+                  deploymentProfile.secrets.map((variable) => `\`${variable.name}\``),
+                )}`,
+              ]
+            : []),
+        ]
+      : []),
     "",
     "## Daily Commands",
     "```bash",
@@ -756,6 +840,7 @@ function gettingStartedDoc(plan: ProjectPlan): string {
 }
 
 function envExample(plan: ProjectPlan): string {
+  const deploymentProfile = getDeploymentProfile(plan);
   const lines = [
     `APP_NAME=${toConstantCase(plan.projectName)}`,
     "NODE_ENV=development",
@@ -779,6 +864,19 @@ function envExample(plan: ProjectPlan): string {
 
   if (plan.frontend || plan.intent === "chrome-extension") {
     lines.push("PUBLIC_API_URL=http://localhost:3001");
+  }
+
+  for (const variable of deploymentProfile?.environmentVariables ?? []) {
+    if (!variable.example) {
+      continue;
+    }
+
+    const keyPrefix = `${variable.name}=`;
+    if (lines.some((line) => line.startsWith(keyPrefix))) {
+      continue;
+    }
+
+    lines.push(`${variable.name}=${variable.example}`);
   }
 
   return `${lines.join("\n")}\n`;
@@ -1371,7 +1469,7 @@ function singlePackageScripts(plan: ProjectPlan): Record<string, string> {
           addRecord(scripts, {
             dev: "next dev",
             build: "next build",
-            start: "next start",
+            start: "next start --hostname 0.0.0.0",
           });
           break;
         case "astro":
@@ -1430,7 +1528,7 @@ function singlePackageScripts(plan: ProjectPlan): Record<string, string> {
         addRecord(scripts, {
           dev: "next dev",
           build: "next build",
-          start: "next start",
+          start: "next start --hostname 0.0.0.0",
         });
       } else {
         addRecord(scripts, {
@@ -2830,9 +2928,10 @@ function backendServerSource(plan: ProjectPlan): string {
         "app.get(\"/\", (_req, res) => res.json(projectInfo));",
         "app.get(\"/health\", (_req, res) => res.json({ ok: true, status: \"healthy\", ...projectInfo }));",
         "",
+        "const host = process.env.HOST ?? \"0.0.0.0\";",
         "const port = Number(process.env.PORT ?? 3001);",
-        "app.listen(port, () => {",
-        "  console.log(`API listening on http://localhost:${port}`);",
+        "app.listen(port, host, () => {",
+        "  console.log(`API listening on http://${host === \"0.0.0.0\" ? \"localhost\" : host}:${port}`);",
         "});",
         "",
       ].join("\n");
@@ -2846,8 +2945,9 @@ function backendServerSource(plan: ProjectPlan): string {
         "app.get(\"/\", async () => projectInfo);",
         "app.get(\"/health\", async () => ({ ok: true, status: \"healthy\", ...projectInfo }));",
         "",
+        "const host = process.env.HOST ?? \"0.0.0.0\";",
         "const port = Number(process.env.PORT ?? 3001);",
-        "app.listen({ port });",
+        "app.listen({ port, host });",
         "",
       ].join("\n");
     case "koa":
@@ -2866,14 +2966,20 @@ function backendServerSource(plan: ProjectPlan): string {
         "  ctx.body = projectInfo;",
         "});",
         "",
+        "const host = process.env.HOST ?? \"0.0.0.0\";",
         "const port = Number(process.env.PORT ?? 3001);",
-        "app.listen(port);",
+        "app.listen(port, host);",
         "",
       ].join("\n");
     case "nestjs":
       return [
         "import { NestFactory } from \"@nestjs/core\";",
         "import { Module, Controller, Get } from \"@nestjs/common\";",
+        ...(plan.backend?.adapter === "fastify"
+          ? [
+              'import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fastify";',
+            ]
+          : []),
         "",
         `const projectInfo = ${projectInfo};`,
         "",
@@ -2894,8 +3000,16 @@ function backendServerSource(plan: ProjectPlan): string {
         "class AppModule {}",
         "",
         "async function bootstrap() {",
-        "  const app = await NestFactory.create(AppModule);",
-        "  await app.listen(Number(process.env.PORT ?? 3001));",
+        ...(plan.backend?.adapter === "fastify"
+          ? [
+              "  const app = await NestFactory.create<NestFastifyApplication>(",
+              "    AppModule,",
+              "    new FastifyAdapter(),",
+              "  );",
+            ]
+          : ["  const app = await NestFactory.create(AppModule);"]),
+        "  const host = process.env.HOST ?? \"0.0.0.0\";",
+        "  await app.listen(Number(process.env.PORT ?? 3001), host);",
         "}",
         "",
         "bootstrap();",
@@ -2913,8 +3027,10 @@ function backendServerSource(plan: ProjectPlan): string {
         "app.get(\"/\", (c) => c.json(projectInfo));",
         "app.get(\"/health\", (c) => c.json({ ok: true, status: \"healthy\", ...projectInfo }));",
         "",
+        "const host = process.env.HOST ?? \"0.0.0.0\";",
         "serve({",
         "  fetch: app.fetch,",
+        "  hostname: host,",
         "  port: Number(process.env.PORT ?? 3001),",
         "});",
         "",
@@ -3334,6 +3450,74 @@ function netlifyConfig(plan: ProjectPlan): string {
   ].join("\n");
 }
 
+function renderBlueprint(plan: ProjectPlan): string {
+  const profile = getDeploymentProfile(plan);
+  const serviceName = plan.projectName.replace(/[^a-z0-9-]/gi, "-").toLowerCase();
+
+  if (!profile || plan.deployment.target !== "render") {
+    return "";
+  }
+
+  if (profile.category === "static-site") {
+    return [
+      "services:",
+      "  - type: web",
+      `    name: ${serviceName}`,
+      "    runtime: static",
+      `    buildCommand: ${profile.buildCommand}`,
+      `    staticPublishPath: ${profile.outputDirectory ?? "dist"}`,
+      "    envVars:",
+      "      - key: NODE_VERSION",
+      "        value: 22.12.0",
+      "",
+    ].join("\n");
+  }
+
+  return [
+    "services:",
+    "  - type: web",
+    `    name: ${serviceName}`,
+    "    runtime: node",
+    `    buildCommand: ${profile.buildCommand}`,
+    `    startCommand: ${profile.startCommand}`,
+    ...(profile.healthPath ? [`    healthCheckPath: ${profile.healthPath}`] : []),
+    "    envVars:",
+    "      - key: NODE_VERSION",
+    "        value: 22.12.0",
+    ...(profile.port
+      ? [
+          "      - key: PORT",
+          `        value: ${profile.port}`,
+        ]
+      : []),
+    "      - key: HOST",
+    "        value: 0.0.0.0",
+    "",
+  ].join("\n");
+}
+
+function railwayConfig(plan: ProjectPlan): string {
+  const profile = getDeploymentProfile(plan);
+
+  if (!profile || plan.deployment.target !== "railway") {
+    return "";
+  }
+
+  return [
+    "[build]",
+    'builder = "RAILPACK"',
+    ...(profile.buildCommand ? [`buildCommand = "${profile.buildCommand}"`] : []),
+    "",
+    "[deploy]",
+    ...(profile.startCommand ? [`startCommand = "${profile.startCommand}"`] : []),
+    ...(profile.healthPath ? [`healthcheckPath = "${profile.healthPath}"`] : []),
+    "healthcheckTimeout = 100",
+    'restartPolicyType = "ON_FAILURE"',
+    "restartPolicyMaxRetries = 10",
+    "",
+  ].join("\n");
+}
+
 function dockerComposeFile(plan: ProjectPlan): string {
   const serviceName = plan.projectName.replace(/[^a-z0-9-]/gi, "-").toLowerCase();
   const internalPort = plan.intent === "backend-api" ? 3001 : 3000;
@@ -3405,6 +3589,28 @@ function deploymentWorkflow(plan: ProjectPlan): string | undefined {
     );
   }
 
+  if (plan.deployment.target === "render") {
+    lines.push(
+      `      - run: ${packageManagerRunCommand(plan.packageManager, "build")}`,
+      "      - run: curl --fail-with-body -X POST \"$RENDER_DEPLOY_HOOK_URL\"",
+      "        env:",
+      "          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}",
+    );
+  }
+
+  if (plan.deployment.target === "railway") {
+    lines.push(
+      "      - run: npm install --global @railway/cli",
+      `      - run: ${packageManagerRunCommand(plan.packageManager, "build")}`,
+      "      - run: railway up --ci --project \"$RAILWAY_PROJECT_ID\" --environment \"$RAILWAY_ENVIRONMENT_NAME\" --service \"$RAILWAY_SERVICE_NAME\"",
+      "        env:",
+      "          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}",
+      "          RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}",
+      "          RAILWAY_ENVIRONMENT_NAME: ${{ secrets.RAILWAY_ENVIRONMENT_NAME }}",
+      "          RAILWAY_SERVICE_NAME: ${{ secrets.RAILWAY_SERVICE_NAME }}",
+    );
+  }
+
   if (plan.deployment.target === "docker-compose") {
     lines.push(
       "      - run: docker compose config",
@@ -3425,6 +3631,14 @@ function deploymentFiles(plan: ProjectPlan): GeneratedFile[] {
 
   if (plan.deployment.target === "netlify") {
     files.push(makeManagedFile("netlify.toml", netlifyConfig(plan)));
+  }
+
+  if (plan.deployment.target === "render") {
+    files.push(makeManagedFile("render.yaml", renderBlueprint(plan)));
+  }
+
+  if (plan.deployment.target === "railway") {
+    files.push(makeManagedFile("railway.toml", railwayConfig(plan)));
   }
 
   if (plan.deployment.target === "docker-compose") {
@@ -3621,7 +3835,7 @@ function testingFiles(plan: ProjectPlan): GeneratedFile[] {
             ? [
                 '  extensionsToTreatAsEsm: [".ts", ".tsx"],',
                 "  transform: {",
-                '    "^.+\\\\.(ts|tsx)$": ["ts-jest", { useESM: true, tsconfig: "tsconfig.json" }],',
+                '    "^.+\\\\.(ts|tsx)$": ["ts-jest", { useESM: true, tsconfig: "tsconfig.json", diagnostics: { ignoreCodes: [151002, 5107] } }],',
                 "  },",
                 '  moduleFileExtensions: ["ts", "tsx", "js", "jsx", "json"],',
               ]
@@ -3635,6 +3849,7 @@ function testingFiles(plan: ProjectPlan): GeneratedFile[] {
       makeFile(
         `src/__tests__/starter.test.${testExtension}`,
         [
+          ...(usesTypeScript(plan) ? ['/// <reference types="jest" />', ""] : []),
           "describe(\"starter test\", () => {",
           "  it(\"keeps the scaffold wired\", () => {",
           "    expect(true).toBe(true);",

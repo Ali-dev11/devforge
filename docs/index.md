@@ -29,7 +29,7 @@ DevForge CLI turns project intent into a runnable JavaScript or TypeScript repos
 - ESLint and Prettier are baseline defaults because most teams want immediate quality and formatting consistency.
 - Husky and Commitlint are optional because local git-hook enforcement varies by team and workflow.
 - Testing, AI rules, backend capabilities, frontend libraries, and DevOps extras can all stay on recommended defaults or be customized only when needed.
-- Deployment targets are limited to verified stack pairs so DevForge only offers deployment baselines it can actually generate and validate.
+- Deployment targets are limited to verified stack pairs so DevForge only offers deployment baselines it can actually generate and validate, including the current `Vercel`, `Netlify`, `Render`, `Railway`, and `Docker Compose` paths.
 
 ## Command Reference
 

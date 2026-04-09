@@ -6,6 +6,36 @@ The format follows Keep a Changelog and the version numbers follow Semantic Vers
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-04-09
+
+### Added
+
+- Added a deployment profile layer that records provider-specific build commands, start commands, ports, health paths, generated files, secrets, and environment-variable expectations for verified scaffold pairs.
+- Added `Render` deployment baselines for verified `react-vite` frontend apps and `express`, `fastify`, and `hono` backend APIs, including generated `render.yaml` output and deploy workflow guidance.
+- Added `Railway` deployment baselines for verified `nextjs` frontend apps and `express`, `fastify`, and `hono` backend APIs, including generated `railway.toml` output and deploy workflow guidance.
+- Added deployment-profile regression coverage, provider-specific generator assertions, runtime-matrix scenarios for `frontend-nextjs-railway` and `backend-fastify-render`, and packed-artifact smoke coverage for deployment-target upgrades.
+- Added deployment-aware `.env.example`, README, architecture, and getting-started outputs so generated projects surface provider env vars and deployment expectations alongside local run commands.
+- Added end-to-end runtime coverage for capability-heavy `NestJS + Fastify + pnpm + Jest` backends and `React Chrome extension + pnpm + Jest` scaffolds so non-default package-manager and test-runner paths are exercised as generated projects.
+
+### Changed
+
+- Expanded deployment-aware scaffold docs and CLI guidance so generated projects now explain build commands, start commands, health checks, provider secrets, and expected environment variables for the selected deployment target.
+- Updated `devforge upgrade` so deployment target changes can remove stale managed provider files such as `vercel.json`, `netlify.toml`, `render.yaml`, `railway.toml`, and `docker-compose.yml` when those files still match a previous generated baseline.
+- Updated generated backend and Next.js runtime commands to bind to deployment-friendly hosts, which makes managed hosting baselines more usable without manual edits.
+- Expanded CI and packed-artifact smoke coverage so the shipped npm package now exercises deployment-target refresh against `Render`, while source CI validates the new `Railway` and `Render` runtime scenarios directly.
+- Clarified backend capability prompts and generated guidance so authentication, database, ORM, Redis, Swagger, and WebSocket selections are described as starter baselines unless the scaffold fully wires them.
+
+### Fixed
+
+- Fixed deployment-target support so verified managed-hosting targets are exercised by the runtime matrix and packed npm smoke path instead of relying only on unit-level generation checks.
+- Fixed deployment upgrade behavior for users switching providers by cleaning up obsolete managed deployment files even when the stored project plan has already been normalized to the new target.
+- Fixed generated Jest example tests so TypeScript projects include explicit Jest type references during `build` and `typecheck` instead of depending on missing ambient globals.
+- Fixed generated Jest configs so TypeScript 6 based scaffolds ignore the known `ts-jest` deprecation codes that would otherwise break `pnpm run test` on browser-oriented projects.
+- Fixed NestJS Fastify scaffolds so the generated server bootstrap uses `@nestjs/platform-fastify` instead of falling back to the default Express driver.
+- Fixed runtime-matrix package-manager installs so `pnpm` and `yarn` scenarios can run through Corepack when the package manager is not globally installed.
+- Fixed the runtime matrix to cover the exact `NestJS + Fastify + pnpm + Jest` backend path and `React Chrome extension + pnpm + Jest` path that had previously escaped end-to-end validation.
+- Fixed runtime-matrix `pnpm` fallbacks on CI runners by switching the no-global-`pnpm` path away from Corepack key resolution and onto an npm-backed `pnpm` invocation.
+
 ## [0.5.0] - 2026-04-02
 
 ### Added

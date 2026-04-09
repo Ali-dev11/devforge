@@ -65,6 +65,34 @@ test("upgrade applies deployment-aware managed files from the stored project pla
   assert.match(deployWorkflow, /vercel deploy --prebuilt --prod/);
 });
 
+test("upgrade removes obsolete managed deployment files when the target changes", async () => {
+  const targetDir = await mkdtemp(join(tmpdir(), "devforge-upgrade-deployment-switch-"));
+  const plan = buildDefaultPlan(environment, {
+    ...cliOptions,
+    outputDir: targetDir,
+    projectName: "devforge-upgrade-deployment-switch",
+  });
+  plan.targetDir = targetDir;
+  plan.deployment.target = "vercel";
+  plan.tooling.githubActions = true;
+
+  await generateProject(plan, environment);
+
+  const storedPlanPath = join(targetDir, PROJECT_PLAN_PATH);
+  const storedPlan = JSON.parse(await readFile(storedPlanPath, "utf8")) as ProjectPlan;
+  storedPlan.deployment.target = "render";
+  await writeFile(storedPlanPath, `${JSON.stringify(storedPlan, null, 2)}\n`, "utf8");
+
+  await applyUpgrade(targetDir, environment, { skipInstall: true });
+
+  await assert.rejects(
+    () => readFile(join(targetDir, "vercel.json"), "utf8"),
+    /ENOENT/,
+  );
+  const renderYaml = await readFile(join(targetDir, "render.yaml"), "utf8");
+  assert.match(renderYaml, /runtime: static/);
+});
+
 test("upgrade skips managed files that users have modified away from the generated baseline", async () => {
   const targetDir = await mkdtemp(join(tmpdir(), "devforge-upgrade-skip-custom-"));
   const plan = buildDefaultPlan(environment, {

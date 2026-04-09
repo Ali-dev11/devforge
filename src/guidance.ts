@@ -3,7 +3,9 @@ import type {
   ArchitectureMode,
   BackendFramework,
   BackendLanguage,
+  DeploymentProfile,
   DeploymentTarget,
+  DeploymentVariable,
   EnvironmentInfo,
   FrontendFramework,
   FrontendRenderingMode,
@@ -34,6 +36,7 @@ import {
   isNodeVersionSupportedForPlan,
   minimumSupportedNodeVersionHint,
 } from "./utils/node-compat.js";
+import { joinSentence, toTitleCase } from "./utils/strings.js";
 
 const ALL_PACKAGE_MANAGERS: PackageManager[] = ["npm", "pnpm", "yarn", "bun"];
 const ALL_UI_LIBRARIES: UiLibrary[] = [
@@ -89,6 +92,10 @@ export function deploymentTargetLabel(target: DeploymentTarget): string {
       return "Vercel";
     case "netlify":
       return "Netlify";
+    case "render":
+      return "Render";
+    case "railway":
+      return "Railway";
     case "docker-compose":
       return "Docker Compose";
     case "none":
@@ -139,6 +146,203 @@ export function packageManagerRunCommand(
     case "npm":
     default:
       return `npm run ${script}`;
+  }
+}
+
+function deploymentPortForPlan(plan: ProjectPlan): number | undefined {
+  if (plan.intent === "backend-api") {
+    return plan.deployment.port ?? 3001;
+  }
+
+  if (plan.frontend?.framework === "nextjs") {
+    return plan.deployment.port ?? 3000;
+  }
+
+  return plan.deployment.port;
+}
+
+function deploymentHealthPathForPlan(plan: ProjectPlan): string | undefined {
+  if (plan.deployment.healthPath) {
+    return plan.deployment.healthPath;
+  }
+
+  if (plan.intent === "backend-api") {
+    return "/health";
+  }
+
+  if (plan.frontend?.framework === "nextjs") {
+    return "/";
+  }
+
+  return undefined;
+}
+
+function makeDeploymentVariable(
+  name: string,
+  description: string,
+  options: { example?: string; secret?: boolean } = {},
+): DeploymentVariable {
+  return {
+    name,
+    description,
+    example: options.example,
+    secret: options.secret,
+  };
+}
+
+export function getDeploymentProfile(
+  plan: ProjectPlan,
+): DeploymentProfile | undefined {
+  const buildCommand = packageManagerRunCommand(plan.packageManager, "build");
+  const startCommand =
+    plan.intent === "backend-api" || plan.frontend?.framework === "nextjs"
+      ? packageManagerRunCommand(plan.packageManager, "start")
+      : undefined;
+  const port = deploymentPortForPlan(plan);
+  const healthPath = deploymentHealthPathForPlan(plan);
+
+  switch (plan.deployment.target) {
+    case "vercel":
+      return {
+        target: "vercel",
+        label: "Vercel",
+        category: plan.frontend?.framework === "react-vite" ? "static-site" : "managed-node",
+        buildCommand,
+        outputDirectory: plan.frontend?.framework === "react-vite" ? "dist" : undefined,
+        generatedFiles: ["vercel.json", ...(plan.tooling.githubActions ? [".github/workflows/deploy.yml"] : [])],
+        secrets: [
+          makeDeploymentVariable("VERCEL_TOKEN", "Vercel access token for CI or manual deploy workflows.", {
+            secret: true,
+          }),
+          makeDeploymentVariable("VERCEL_ORG_ID", "Vercel team or account identifier used by the generated workflow.", {
+            secret: true,
+          }),
+          makeDeploymentVariable("VERCEL_PROJECT_ID", "Vercel project identifier used by the generated workflow.", {
+            secret: true,
+          }),
+        ],
+        environmentVariables: [],
+      };
+    case "netlify":
+      return {
+        target: "netlify",
+        label: "Netlify",
+        category: "static-site",
+        buildCommand,
+        outputDirectory: "dist",
+        generatedFiles: ["netlify.toml", ...(plan.tooling.githubActions ? [".github/workflows/deploy.yml"] : [])],
+        secrets: [
+          makeDeploymentVariable("NETLIFY_AUTH_TOKEN", "Netlify token for CI or manual deploy workflows.", {
+            secret: true,
+          }),
+          makeDeploymentVariable("NETLIFY_SITE_ID", "Netlify site identifier used by the generated workflow.", {
+            secret: true,
+          }),
+        ],
+        environmentVariables: [],
+      };
+    case "render":
+      return {
+        target: "render",
+        label: "Render",
+        category: plan.frontend?.framework === "react-vite" ? "static-site" : "managed-node",
+        port,
+        healthPath,
+        buildCommand,
+        startCommand,
+        outputDirectory: plan.frontend?.framework === "react-vite" ? "dist" : undefined,
+        generatedFiles: ["render.yaml", ...(plan.tooling.githubActions ? [".github/workflows/deploy.yml"] : [])],
+        secrets: [
+          makeDeploymentVariable(
+            "RENDER_DEPLOY_HOOK_URL",
+            "Render deploy hook URL used by the generated GitHub Actions workflow.",
+            { secret: true },
+          ),
+        ],
+        environmentVariables: [
+          ...(plan.frontend?.framework === "react-vite"
+            ? [makeDeploymentVariable("NODE_VERSION", "Node.js version used during Render builds.", {
+                example: "22.12.0",
+              })]
+            : [
+                makeDeploymentVariable("NODE_VERSION", "Node.js version used by Render for build and runtime parity.", {
+                  example: "22.12.0",
+                }),
+                ...(port
+                  ? [makeDeploymentVariable("PORT", "Port expected by the Render web service.", {
+                      example: String(port),
+                    })]
+                  : []),
+                makeDeploymentVariable("HOST", "Bind address for containerized runtime processes.", {
+                  example: "0.0.0.0",
+                }),
+              ]),
+        ],
+      };
+    case "railway":
+      return {
+        target: "railway",
+        label: "Railway",
+        category: "managed-node",
+        port,
+        healthPath,
+        buildCommand,
+        startCommand,
+        generatedFiles: ["railway.toml", ...(plan.tooling.githubActions ? [".github/workflows/deploy.yml"] : [])],
+        secrets: [
+          makeDeploymentVariable("RAILWAY_TOKEN", "Railway project token used by the generated GitHub Actions workflow.", {
+            secret: true,
+          }),
+          makeDeploymentVariable("RAILWAY_PROJECT_ID", "Railway project identifier for CI deploys.", {
+            secret: true,
+          }),
+          makeDeploymentVariable("RAILWAY_ENVIRONMENT_NAME", "Railway environment name or id used by the CI workflow.", {
+            secret: true,
+          }),
+          makeDeploymentVariable("RAILWAY_SERVICE_NAME", "Railway service name to deploy from CI.", {
+            secret: true,
+          }),
+        ],
+        environmentVariables: [
+          ...(port
+            ? [makeDeploymentVariable("PORT", "Port expected by the Railway runtime.", {
+                example: String(port),
+              })]
+            : []),
+          makeDeploymentVariable("HOST", "Bind address for the generated runtime server.", {
+            example: "0.0.0.0",
+          }),
+        ],
+      };
+    case "docker-compose":
+      return {
+        target: "docker-compose",
+        label: "Docker Compose",
+        category: "container",
+        port,
+        healthPath,
+        buildCommand,
+        startCommand,
+        generatedFiles: [
+          "docker-compose.yml",
+          "Dockerfile",
+          ...(plan.tooling.githubActions ? [".github/workflows/deploy.yml"] : []),
+        ],
+        secrets: [],
+        environmentVariables: [
+          ...(port
+            ? [makeDeploymentVariable("PORT", "Port exposed by the generated container.", {
+                example: String(port),
+              })]
+            : []),
+          makeDeploymentVariable("NODE_ENV", "Runtime mode for containerized app processes.", {
+            example: "production",
+          }),
+        ],
+      };
+    case "none":
+    default:
+      return undefined;
   }
 }
 
@@ -344,7 +548,7 @@ export function getSupportedDeploymentTargets(
     plan.architecture === "simple" &&
     plan.frontend?.framework === "react-vite"
   ) {
-    targets.push("vercel", "netlify");
+    targets.push("vercel", "netlify", "render");
   }
 
   if (
@@ -352,7 +556,7 @@ export function getSupportedDeploymentTargets(
     plan.architecture === "simple" &&
     plan.frontend?.framework === "nextjs"
   ) {
-    targets.push("vercel");
+    targets.push("vercel", "render", "railway");
   }
 
   if (
@@ -361,7 +565,7 @@ export function getSupportedDeploymentTargets(
     plan.backend &&
     ["express", "fastify", "hono"].includes(plan.backend.framework)
   ) {
-    targets.push("docker-compose");
+    targets.push("docker-compose", "render", "railway");
   }
 
   return targets;
@@ -506,9 +710,49 @@ export function getGenericPrerequisites(plan: ProjectPlan): AdvisoryItem[] {
   return requiredBeforeRun;
 }
 
+function selectedBackendCapabilityBaselines(plan: ProjectPlan): string[] {
+  if (!plan.backend) {
+    return [];
+  }
+
+  const baselines: string[] = [];
+
+  if (plan.backend.auth.includes("jwt")) {
+    baselines.push("JWT auth");
+  }
+
+  if (plan.backend.auth.includes("oauth")) {
+    baselines.push("OAuth");
+  }
+
+  if (plan.backend.database !== "none") {
+    baselines.push(`${toTitleCase(plan.backend.database)} database wiring`);
+  }
+
+  if (plan.backend.orm !== "none") {
+    baselines.push(`${toTitleCase(plan.backend.orm)} data layer`);
+  }
+
+  if (plan.backend.redis) {
+    baselines.push("Redis integration");
+  }
+
+  if (plan.backend.swagger) {
+    baselines.push("Swagger");
+  }
+
+  if (plan.backend.websockets) {
+    baselines.push("WebSockets");
+  }
+
+  return baselines;
+}
+
 export function getStackNotes(plan: ProjectPlan): string[] {
   const notes: string[] = [];
   const defaultUrl = getDefaultLocalUrl(plan);
+  const deploymentProfile = getDeploymentProfile(plan);
+  const backendCapabilityBaselines = selectedBackendCapabilityBaselines(plan);
 
   if (plan.intent === "backend-api") {
     notes.push(`The generated API exposes a health endpoint at ${defaultUrl}.`);
@@ -545,9 +789,22 @@ export function getStackNotes(plan: ProjectPlan): string[] {
     notes.push(`Open ${defaultUrl} after starting the dev server to inspect the generated starter surface.`);
   }
 
-  if (plan.deployment.target !== "none") {
+  if (deploymentProfile) {
     notes.push(
-      `The scaffold includes a ${deploymentTargetLabel(plan.deployment.target)} deployment baseline. Review the generated deployment files before using them in production.`,
+      `The scaffold includes a ${deploymentProfile.label} deployment baseline. Review the generated deployment files before using them in production.`,
+    );
+    if (deploymentProfile.healthPath) {
+      notes.push(
+        `Deployment health checks are expected to pass on ${deploymentProfile.healthPath}. Keep that route stable when you start customizing the app.`,
+      );
+    }
+  }
+
+  if (backendCapabilityBaselines.length > 0) {
+    notes.push(
+      `Selected backend capabilities are starter baselines, not full implementations: ${joinSentence(
+        backendCapabilityBaselines,
+      )}. Finish the actual modules, providers, configuration, and runtime integration before treating them as production-ready.`,
     );
   }
 
@@ -556,6 +813,7 @@ export function getStackNotes(plan: ProjectPlan): string[] {
 
 export function buildTemplateGuidance(plan: ProjectPlan): PostCreateGuidance {
   const scripts = getPrimaryScriptNames(plan);
+  const deploymentProfile = getDeploymentProfile(plan);
   const nextCommands = [
     packageManagerInstallCommand(plan.packageManager),
     scripts.dev ? packageManagerRunCommand(plan.packageManager, scripts.dev) : undefined,
@@ -597,6 +855,39 @@ export function buildTemplateGuidance(plan: ProjectPlan): PostCreateGuidance {
     recommended.push({
       title: "Configure Netlify credentials before using the deployment workflow",
       detail: "Set `NETLIFY_AUTH_TOKEN` and `NETLIFY_SITE_ID` before triggering the generated Netlify deploy workflow.",
+    });
+  }
+
+  if (plan.deployment.target === "render") {
+    recommended.push({
+      title: "Configure Render deploy access before using the deployment workflow",
+      detail: "Set `RENDER_DEPLOY_HOOK_URL` before triggering the generated Render workflow, then validate the generated `render.yaml` against your Render workspace settings.",
+    });
+  }
+
+  if (plan.deployment.target === "railway") {
+    recommended.push({
+      title: "Configure Railway project identifiers before using the deployment workflow",
+      detail: "Set `RAILWAY_TOKEN`, `RAILWAY_PROJECT_ID`, `RAILWAY_ENVIRONMENT_NAME`, and `RAILWAY_SERVICE_NAME` before triggering the generated Railway workflow.",
+    });
+  }
+
+  if (deploymentProfile?.environmentVariables.length) {
+    recommended.push({
+      title: "Review deployment environment variables before first deploy",
+      detail: `The generated ${deploymentProfile.label} baseline expects ${joinSentence(
+        deploymentProfile.environmentVariables.map((variable) => `\`${variable.name}\``),
+      )}. Mirror those values in your provider dashboard before treating the deployment config as production-ready.`,
+    });
+  }
+
+  const backendCapabilityBaselines = selectedBackendCapabilityBaselines(plan);
+  if (backendCapabilityBaselines.length > 0) {
+    recommended.push({
+      title: "Finish backend capability baselines before shipping",
+      detail: `This scaffold adds starter wiring for ${joinSentence(
+        backendCapabilityBaselines,
+      )}, but you still need to implement the real modules, configuration, guards, adapters, persistence, and integration paths for your application.`,
     });
   }
 

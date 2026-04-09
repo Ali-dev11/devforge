@@ -450,6 +450,10 @@ test("jest scaffolds emit runnable cjs config for TypeScript projects", () => {
   assert.match(jestConfigFile.content, /module\.exports = config/);
   assert.match(jestConfigFile.content, /ts-jest/);
   assert.match(jestConfigFile.content, /extensionsToTreatAsEsm/);
+  assert.match(jestConfigFile.content, /ignoreCodes: \[151002, 5107\]/);
+  const exampleTest = files.find((file) => file.path === "src/__tests__/starter.test.ts");
+  assert.ok(exampleTest);
+  assert.match(exampleTest.content, /reference types="jest"/);
 });
 
 test("supported deployment targets generate target-specific files and docs", () => {
@@ -474,6 +478,29 @@ test("supported deployment targets generate target-specific files and docs", () 
   assert.match(netlifyFile.content, /publish = "dist"/);
   assert.match(reactReadme.content, /Deployment target: Netlify/);
 
+  const renderFrontendPlan = buildDefaultPlan(environment, cliOptions);
+  renderFrontendPlan.intent = "frontend-app";
+  renderFrontendPlan.frontend = {
+    framework: "react-vite",
+    rendering: "client",
+    styling: "tailwind-css",
+    uiLibrary: "shadcn-ui",
+    state: "zustand",
+    dataFetching: "tanstack-query",
+  };
+  renderFrontendPlan.deployment.target = "render";
+  renderFrontendPlan.tooling.githubActions = true;
+
+  const renderFrontendFiles = buildProjectFiles(renderFrontendPlan, environment);
+  const renderYaml = renderFrontendFiles.find((file) => file.path === "render.yaml");
+  const renderWorkflow = renderFrontendFiles.find((file) => file.path === ".github/workflows/deploy.yml");
+
+  assert.ok(renderYaml);
+  assert.ok(renderWorkflow);
+  assert.match(renderYaml.content, /runtime: static/);
+  assert.match(renderYaml.content, /staticPublishPath: dist/);
+  assert.match(renderWorkflow.content, /RENDER_DEPLOY_HOOK_URL/);
+
   const nextPlan = buildDefaultPlan(environment, cliOptions);
   nextPlan.intent = "frontend-app";
   nextPlan.frontend = {
@@ -493,6 +520,32 @@ test("supported deployment targets generate target-specific files and docs", () 
   assert.ok(vercelFile);
   assert.ok(deployWorkflow);
   assert.match(deployWorkflow.content, /vercel deploy --prebuilt --prod/);
+
+  const railwayPlan = buildDefaultPlan(environment, cliOptions);
+  railwayPlan.intent = "frontend-app";
+  railwayPlan.frontend = {
+    framework: "nextjs",
+    rendering: "ssr",
+    styling: "vanilla-css",
+    uiLibrary: "none",
+    state: "none",
+    dataFetching: "native-fetch",
+  };
+  railwayPlan.deployment.target = "railway";
+  railwayPlan.tooling.githubActions = true;
+
+  const railwayFiles = buildProjectFiles(railwayPlan, environment);
+  const railwayConfigFile = railwayFiles.find((file) => file.path === "railway.toml");
+  const railwayWorkflow = railwayFiles.find((file) => file.path === ".github/workflows/deploy.yml");
+  const railwayPackageJson = railwayFiles.find((file) => file.path === "package.json");
+
+  assert.ok(railwayConfigFile);
+  assert.ok(railwayWorkflow);
+  assert.ok(railwayPackageJson);
+  assert.match(railwayConfigFile.content, /\[deploy\]/);
+  assert.match(railwayConfigFile.content, /startCommand = "pnpm run start"/);
+  assert.match(railwayWorkflow.content, /railway up --ci/);
+  assert.match(railwayPackageJson.content, /next start --hostname 0\.0\.0\.0/);
 
   const backendPlan = buildDefaultPlan(environment, cliOptions);
   backendPlan.intent = "backend-api";
@@ -518,6 +571,33 @@ test("supported deployment targets generate target-specific files and docs", () 
   assert.ok(dockerfile);
   assert.match(composeFile.content, /3001:3001/);
   assert.match(dockerfile.content, /CMD \["pnpm","run","start"\]/);
+
+  const renderBackendPlan = buildDefaultPlan(environment, cliOptions);
+  renderBackendPlan.intent = "backend-api";
+  applyIntentDefaults(renderBackendPlan);
+  renderBackendPlan.backend = {
+    framework: "fastify",
+    language: "typescript",
+    auth: [],
+    orm: "none",
+    database: "none",
+    redis: false,
+    swagger: true,
+    websockets: false,
+  };
+  renderBackendPlan.deployment.target = "render";
+  renderBackendPlan.tooling.githubActions = true;
+
+  const renderBackendFiles = buildProjectFiles(renderBackendPlan, environment);
+  const renderBackendYaml = renderBackendFiles.find((file) => file.path === "render.yaml");
+  const backendServer = renderBackendFiles.find((file) => file.path === "src/server.ts");
+
+  assert.ok(renderBackendYaml);
+  assert.ok(backendServer);
+  assert.match(renderBackendYaml.content, /runtime: node/);
+  assert.match(renderBackendYaml.content, /healthCheckPath: \/health/);
+  assert.match(renderBackendYaml.content, /HOST/);
+  assert.match(backendServer.content, /const host = process\.env\.HOST \?\? "0\.0\.0\.0"/);
 });
 
 test("nestjs and javascript backend scaffolds include compatible build settings", () => {
@@ -527,7 +607,7 @@ test("nestjs and javascript backend scaffolds include compatible build settings"
   nestPlan.backend = {
     framework: "nestjs",
     language: "typescript",
-    adapter: "express",
+    adapter: "fastify",
     auth: [],
     orm: "none",
     database: "none",
@@ -538,10 +618,19 @@ test("nestjs and javascript backend scaffolds include compatible build settings"
 
   const nestFiles = buildProjectFiles(nestPlan, environment);
   const nestTsconfig = nestFiles.find((file) => file.path === "tsconfig.json");
+  const nestPackageJsonFile = nestFiles.find((file) => file.path === "package.json");
+  const nestServerFile = nestFiles.find((file) => file.path === "src/server.ts");
 
   assert.ok(nestTsconfig);
+  assert.ok(nestPackageJsonFile);
+  assert.ok(nestServerFile);
   assert.match(nestTsconfig.content, /"experimentalDecorators": true/);
   assert.match(nestTsconfig.content, /"emitDecoratorMetadata": true/);
+  assert.match(nestPackageJsonFile.content, /@nestjs\/platform-fastify/);
+  assert.doesNotMatch(nestPackageJsonFile.content, /@nestjs\/platform-express/);
+  assert.match(nestServerFile.content, /FastifyAdapter/);
+  assert.match(nestServerFile.content, /NestFastifyApplication/);
+  assert.match(nestServerFile.content, /new FastifyAdapter\(\)/);
 
   const jsBackendPlan = buildDefaultPlan(environment, cliOptions);
   jsBackendPlan.intent = "backend-api";
@@ -565,6 +654,33 @@ test("nestjs and javascript backend scaffolds include compatible build settings"
     scripts: Record<string, string>;
   };
   assert.match(jsPackageJson.scripts.build, /does not require compilation/);
+});
+
+test("backend capability selections are documented as starter baselines in generated docs", () => {
+  const plan = buildDefaultPlan(environment, cliOptions);
+  plan.intent = "backend-api";
+  applyIntentDefaults(plan);
+  plan.backend = {
+    framework: "nestjs",
+    language: "typescript",
+    adapter: "fastify",
+    auth: ["jwt", "oauth"],
+    orm: "drizzle",
+    database: "postgresql",
+    redis: true,
+    swagger: true,
+    websockets: true,
+  };
+
+  const files = buildProjectFiles(plan, environment);
+  const readmeFile = files.find((file) => file.path === "README.md");
+  const gettingStartedFile = files.find((file) => file.path === "docs/getting-started.md");
+
+  assert.ok(readmeFile);
+  assert.ok(gettingStartedFile);
+  assert.match(readmeFile.content, /Finish backend capability baselines before shipping/);
+  assert.match(readmeFile.content, /starter baselines, not full implementations/);
+  assert.match(gettingStartedFile.content, /Finish backend capability baselines before shipping/);
 });
 
 test("lts and latest node strategies do not emit a version-manager file", () => {

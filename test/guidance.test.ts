@@ -301,3 +301,31 @@ test("template guidance carries Bun and Docker prerequisites into generated docs
     /Install Docker before using container workflows/i,
   );
 });
+
+test("template guidance flags backend capability selections as starter baselines", () => {
+  const environment = createEnvironment("darwin");
+  const plan = buildDefaultPlan(environment, cliOptions);
+  plan.intent = "backend-api";
+  plan.backend = {
+    framework: "nestjs",
+    language: "typescript",
+    adapter: "fastify",
+    auth: ["jwt", "oauth"],
+    orm: "drizzle",
+    database: "postgresql",
+    redis: true,
+    swagger: true,
+    websockets: true,
+  };
+
+  const guidance = buildTemplateGuidance(plan);
+
+  assert.match(
+    guidance.recommended.map((item) => `${item.title} ${item.detail}`).join("\n"),
+    /Finish backend capability baselines before shipping[\s\S]*JWT auth[\s\S]*OAuth[\s\S]*Postgresql database wiring[\s\S]*Drizzle data layer[\s\S]*Redis integration[\s\S]*Swagger[\s\S]*WebSockets/i,
+  );
+  assert.match(
+    guidance.stackNotes.join("\n"),
+    /starter baselines, not full implementations/i,
+  );
+});
