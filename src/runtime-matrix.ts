@@ -44,6 +44,7 @@ type ScenarioExecutionContext = {
   plan: ProjectPlan;
   targetDir: string;
   port: number;
+  environment: EnvironmentInfo;
 };
 
 type ScenarioResult = {
@@ -69,6 +70,7 @@ type StartedProcess = {
 
 const BASE_PORT = 4600;
 const PROCESS_LOG_LIMIT = 80;
+const PNPM_RUNTIME_FALLBACK_VERSION = "9";
 
 function baseCliOptions(): CliOptions {
   return {
@@ -170,7 +172,46 @@ function parseArgs(argv: string[]): ParsedArgs {
   return parsed;
 }
 
-function installCommandForPackageManager(
+function runtimePackageManagerAvailable(
+  environment: EnvironmentInfo,
+  packageManager: ProjectPlan["packageManager"],
+): boolean {
+  if (packageManager === "pnpm") {
+    return environment.packageManagers.pnpm.installed || environment.packageManagers.npm.installed;
+  }
+
+  return canUsePackageManager(environment, packageManager);
+}
+
+function runtimePackageManagerInvocation(
+  environment: EnvironmentInfo,
+  packageManager: ProjectPlan["packageManager"],
+  args: string[],
+): {
+  command: string;
+  args: string[];
+} {
+  if (packageManager === "pnpm" && !environment.packageManagers.pnpm.installed) {
+    return {
+      command: "npx",
+      args: ["--yes", `pnpm@${PNPM_RUNTIME_FALLBACK_VERSION}`, ...args],
+    };
+  }
+
+  switch (packageManager) {
+    case "pnpm":
+      return { command: "pnpm", args };
+    case "yarn":
+      return { command: "yarn", args };
+    case "bun":
+      return { command: "bun", args };
+    case "npm":
+    default:
+      return { command: "npm", args };
+  }
+}
+
+export function installCommandForPackageManager(
   environment: EnvironmentInfo,
   packageManager: ProjectPlan["packageManager"],
 ): {
@@ -179,9 +220,7 @@ function installCommandForPackageManager(
 } {
   switch (packageManager) {
     case "pnpm":
-      return environment.packageManagers.pnpm.installed
-        ? { command: "pnpm", args: ["install"] }
-        : { command: "corepack", args: ["pnpm", "install"] };
+      return runtimePackageManagerInvocation(environment, "pnpm", ["install"]);
     case "yarn":
       return environment.packageManagers.yarn.installed
         ? { command: "yarn", args: ["install"] }
@@ -192,6 +231,23 @@ function installCommandForPackageManager(
     default:
       return { command: "npm", args: ["install", "--no-audit", "--no-fund"] };
   }
+}
+
+export function runtimeScriptInvocation(
+  environment: EnvironmentInfo,
+  packageManager: ProjectPlan["packageManager"],
+  script: string,
+  extraArgs: string[] = [],
+): { command: string; args: string[] } {
+  if (packageManager === "pnpm") {
+    return runtimePackageManagerInvocation(environment, "pnpm", [
+      "run",
+      script,
+      ...(extraArgs.length > 0 ? ["--", ...extraArgs] : []),
+    ]);
+  }
+
+  return packageManagerScriptInvocation(packageManager, script, extraArgs);
 }
 
 function lastLogs(logs: string[]): string {
@@ -529,7 +585,8 @@ async function verifyPreviewRuntime(
     env?: Record<string, string | undefined>;
   },
 ): Promise<void> {
-  const invocation = packageManagerScriptInvocation(
+  const invocation = runtimeScriptInvocation(
+    context.environment,
     context.plan.packageManager,
     previewCommand.script,
     previewCommand.extraArgs,
@@ -556,7 +613,8 @@ async function verifyScriptRuntime(
   targets: Array<{ url: string }>,
 ): Promise<void> {
   const cwd = command.cwd ? join(context.targetDir, command.cwd) : context.targetDir;
-  const invocation = packageManagerScriptInvocation(
+  const invocation = runtimeScriptInvocation(
+    context.environment,
     context.plan.packageManager,
     command.script,
     command.extraArgs,
@@ -585,7 +643,8 @@ async function verifyApiRuntime(
   command: { cwd?: string; script: string; extraArgs?: string[]; path: string },
 ): Promise<void> {
   const cwd = command.cwd ? join(context.targetDir, command.cwd) : context.targetDir;
-  const invocation = packageManagerScriptInvocation(
+  const invocation = runtimeScriptInvocation(
+    context.environment,
     context.plan.packageManager,
     command.script,
     command.extraArgs,
@@ -633,7 +692,8 @@ async function runScenarioScript(
   },
 ): Promise<void> {
   const cwd = command.cwd ? join(context.targetDir, command.cwd) : context.targetDir;
-  const invocation = packageManagerScriptInvocation(
+  const invocation = runtimeScriptInvocation(
+    context.environment,
     context.plan.packageManager,
     command.script,
     command.extraArgs,
@@ -1412,7 +1472,7 @@ async function runScenario(
     };
   }
 
-  if (!canUsePackageManager(environment, plan.packageManager)) {
+  if (!runtimePackageManagerAvailable(environment, plan.packageManager)) {
     console.log(
       `[${scenario.name}] skipped because ${plan.packageManager} is not installed in the current environment.`,
     );
@@ -1436,7 +1496,7 @@ async function runScenario(
     await runCommand(installInvocation.command, installInvocation.args, targetDir);
 
     console.log(`[${scenario.name}] building scaffold`);
-    const buildInvocation = packageManagerScriptInvocation(plan.packageManager, "build");
+    const buildInvocation = runtimeScriptInvocation(environment, plan.packageManager, "build");
     await runCommand(buildInvocation.command, buildInvocation.args, targetDir);
 
     console.log(`[${scenario.name}] verifying ${scenario.mode}`);
@@ -1445,6 +1505,7 @@ async function runScenario(
       plan,
       targetDir,
       port: BASE_PORT + scenarioIndex,
+      environment,
     });
   } catch (error) {
     if (!keepFixtures) {

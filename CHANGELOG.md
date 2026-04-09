@@ -34,6 +34,7 @@ The format follows Keep a Changelog and the version numbers follow Semantic Vers
 - Fixed NestJS Fastify scaffolds so the generated server bootstrap uses `@nestjs/platform-fastify` instead of falling back to the default Express driver.
 - Fixed runtime-matrix package-manager installs so `pnpm` and `yarn` scenarios can run through Corepack when the package manager is not globally installed.
 - Fixed the runtime matrix to cover the exact `NestJS + Fastify + pnpm + Jest` backend path and `React Chrome extension + pnpm + Jest` path that had previously escaped end-to-end validation.
+- Fixed runtime-matrix `pnpm` fallbacks on CI runners by switching the no-global-`pnpm` path away from Corepack key resolution and onto an npm-backed `pnpm` invocation.
 
 ## [0.5.0] - 2026-04-02
 
